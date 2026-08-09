@@ -48,8 +48,6 @@ jobs:
             }
           }
 
-      - name: Validate skill (CI-safe)
+      - name: Validate skill
         shell: powershell
-        run: |
-          $env:CI_MODE = 'true'
-          .\scripts\validate-skill.ps1 -SkipNetwork -SkipAuth
+        run: .\scripts\validate-skill.ps1
