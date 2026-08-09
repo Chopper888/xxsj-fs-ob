@@ -1,192 +1,167 @@
-﻿# xxsj-fs-ob
+# xxsj-fs-ob
 
-# Douyin Self-Share Capture / 抖音自分享捕获
+把平台内容自动变成自己的 Obsidian 知识资产。
 
-This project monitors the user's own Douyin web inbox and writes newly shared-to-self items into Feishu Base.
+飞书 → Base → Local Worker → ASR → DeepSeek → Obsidian
 
-本项目监控用户自己的抖音网页版私信会话，把“转发给自己”的新增内容写入飞书多维表格，作为个人知识库入口。
+Turn shared content into structured knowledge.
 
-## What It Does / 功能
+[![Release](https://img.shields.io/github/v/release/Chopper888/xxsj-fs-ob)](https://github.com/Chopper888/xxsj-fs-ob/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/Chopper888/xxsj-fs-ob/actions/workflows/ci.yml/badge.svg)](https://github.com/Chopper888/xxsj-fs-ob/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-229%2F229-brightgreen)](https://github.com/Chopper888/xxsj-fs-ob)
+[![Windows](https://img.shields.io/badge/Windows-supported-blue)](https://github.com/Chopper888/xxsj-fs-ob)
+[![Douyin](https://img.shields.io/badge/Douyin-supported-red)](https://github.com/Chopper888/xxsj-fs-ob)
 
-- Sender can be iPhone, Android, Douyin web, or Douyin desktop, as long as the message appears in Douyin web inbox.
-- The monitor runs from the computer side with Playwright and a persistent browser profile.
-- Video share cards are clicked to resolve a Douyin aweme ID. The monitor expands the caption before reading it and excludes author badges, publish times, collections, and other page controls from the title.
-- After a video record is written successfully, the monitor enqueues it for internal async deep processing: exact-ID media lookup, audio-stream validation, direct MP4 transcription with Whisper `base`, Traditional-to-Simplified conversion, summary generation, and Feishu update by `去重 ID`.
-- Feishu fields written by the MVP are: `标题`, `内容类型`, `原始链接`, `原始文本`, `作者/来源`, `摘要`, `捕获时间`, `处理状态`, `去重 ID`, `错误信息`, `知识库链接`.
-- Feishu fields `关键点` and `标签` are not part of the current MVP field contract.
+## 它解决什么问题
 
-- 发送端可以是 iPhone、Android、抖音网页端或桌面端，只要消息能同步到电脑端抖音网页版私信。
-- 监控端使用 Playwright 和持久浏览器用户目录运行在电脑上。
-- 视频分享卡片会被点击解析出抖音作品 ID。监控会先展开文案再读取标题，并排除作者徽章、发布时间、合集和其他页面控件。
-- 视频记录成功写入后，监控工具会放入内部异步队列：按作品 ID 精确获取媒体、校验音轨、使用 Whisper `base` 直接转写 MP4、繁体转简体、生成摘要，并按 `去重 ID` 回写飞书。
-- 当前 MVP 写入飞书的字段是：`标题`、`内容类型`、`原始链接`、`原始文本`、`作者/来源`、`摘要`、`捕获时间`、`处理状态`、`去重 ID`、`错误信息`、`知识库链接`。
-- `关键点` 和 `标签` 两个飞书字段不属于当前 MVP 字段契约。
+你把抖音链接发给自己的飞书机器人，后续的下载、转写、AI 分析、Obsidian 归档全部自动完成。不用手动复制、不用来回切换工具。
 
-## Field Meaning / 字段含义
+## 最终效果
 
-- `标题`: for video share cards, this is the expanded video caption including hashtags when available. Author metadata and page controls are excluded.
-- `摘要`: video records leave this empty at first; the async worker fills it from the transcript when deep processing succeeds.
-- `原始文本`: the raw visible message text from the Douyin chat card, except standalone share-card author text. After video deep processing succeeds, this field is updated with the transcript.
-- `作者/来源`: parsed from the first `作者: 内容` or `作者：内容` prefix, or from a standalone Douyin share-card author.
-- `原始链接`: the resolved Douyin video URL when enrichment succeeds.
+**飞书多维表格**里可以看到每条任务的完整生命周期：
 
-- `标题`：视频分享卡片使用展开后的作品文案，能读到 `#话题` 时包含 `#话题`；不包含用户名、认证徽章、发布时间、合集、`识别画面` 或 `个人观点，仅供参考` 等界面信息。
-- `摘要`：视频记录初次写入时留空；异步深度处理成功后，才写入基于转写全文的摘要。
-- `原始文本`：抖音聊天卡片里的原始可见文本，但不再放入分享卡片里单独显示的作者名。视频深度处理成功后，这个字段会更新为转写全文。
-- `作者/来源`：能识别 `作者: 内容` 或 `作者：内容` 前缀时取作者部分；抖音分享卡片单独显示作者名时也写到这里。
-- `原始链接`：卡片增强成功时写入解析出的抖音视频链接。
+```
+pending → processing → draft_ready → done
+```
 
-## Setup / 配置
+**Obsidian** 里自动生成结构化笔记：标题、作者、平台、原文链接、内容提要、完整逐字稿、AI 分类和「值得保存的信息」。
 
-Prerequisites: Node.js, Corepack, Python 3.10+, FFmpeg (`ffmpeg` and `ffprobe`), and an authenticated `lark-cli` with write access to the target Feishu Base.
+## 工作流程
 
-前置条件：Node.js、Corepack、Python 3.10+、FFmpeg（同时提供 `ffmpeg` 和 `ffprobe`），以及已完成用户认证且可写入目标多维表格的 `lark-cli`。
+```mermaid
+flowchart LR
+    A[抖音链接] --> B[飞书机器人]
+    B --> C[飞书多维表格 Base]
+    C --> D[Local Worker]
+    D --> E[解析与下载]
+    E --> F[Qwen-ASR]
+    F -->|失败 fallback| G[Faster-Whisper Large-v3]
+    F --> H[DeepSeek]
+    G --> H
+    H --> I[Markdown]
+    I --> J[Obsidian]
+    J --> K[Base 回写 done]
+```
+
+## Quick Start
+
+### 前置条件
+
+- Windows 电脑
+- Node.js、pnpm、Python 3.10+、FFmpeg
+- 自己的飞书应用（含机器人 + 多维表格）
+- Qwen（阿里云 DashScope）API Key
+- DeepSeek API Key
+- Obsidian
+
+### 安装
 
 ```bash
-corepack enable
+git clone https://github.com/Chopper888/xxsj-fs-ob.git
+cd xxsj-fs-ob
 pnpm install
-pnpm exec playwright install chromium
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+```
+
+### 配置
+
+```bash
 cp .env.example .env
+# 编辑 .env，填写飞书、Qwen、DeepSeek、Obsidian 等信息
 ```
 
-Fill `.env` locally. Do not commit `.env`.
+详细部署说明见 [docs/安装部署与日常使用说明.md](docs/安装部署与日常使用说明.md)。
 
-本地填写 `.env`。不要提交 `.env`。
+### 环境检查
 
-Required values:
-
-必填项：
-
-```dotenv
-FEISHU_BASE_TOKEN=
-FEISHU_TABLE_ID=
+```powershell
+.\scripts\doctor.ps1
 ```
 
-Recommended Douyin monitor values:
+### 启动 Worker
 
-推荐的抖音监控配置：
+双击项目根目录的：
 
-```dotenv
-DOUYIN_INBOX_URL=https://www.douyin.com
-DOUYIN_OPEN_MESSAGE_TEXT=消息
-DOUYIN_OPEN_CHAT_TEXT=你的会话名
-BROWSER_USER_DATA_DIR=.browser/douyin
-HEADLESS=false
-DOUYIN_OFFSCREEN=true
-VIDEO_DEEP_PROCESSING=true
-TRANSCRIBE_MODEL=base
-TRANSCRIBE_LANGUAGE=zh
-TRANSCRIBE_COMPUTE_TYPE=
+```
+start-xxsj-fs-ob-worker.cmd
 ```
 
-`TRANSCRIBE_COMPUTE_TYPE` is kept for queue compatibility and is ignored by the OpenAI Whisper backend.
+或让 Codex 帮你：
 
-`TRANSCRIBE_COMPUTE_TYPE` 为队列兼容保留，OpenAI Whisper 后端会忽略它。
+> 请使用 xxsj-fs-ob 检查 Worker 状态。如果环境正常且 Worker 尚未运行，请启动 Worker。
 
-`HEADLESS=false` is intentional. Pure headless mode can trigger Douyin verification pages. `DOUYIN_OFFSCREEN=true` keeps a real Chromium window but moves/minimizes/hides it so normal mouse use is not interrupted.
+### 触发任务
 
-`HEADLESS=false` 是有意保留的。纯 headless 容易触发抖音验证页。`DOUYIN_OFFSCREEN=true` 会保留真实 Chromium 窗口，但把窗口移到屏幕外并最小化/隐藏，避免影响日常鼠标操作。
+Worker 启动后，把你感兴趣的抖音链接发给自己的飞书机器人即可。剩下的事全部自动。
 
-`VIDEO_DEEP_PROCESSING=true` means `pnpm monitor` will process video jobs in the background after the link record is written. Set it to `false` only when debugging the monitor without transcription.
+### 停止 Worker
 
-`VIDEO_DEEP_PROCESSING=true` 表示 `pnpm monitor` 会在链接记录写入后后台处理视频任务。只有在调试监控、不想转写时才设为 `false`。
-
-For Agnes AI or another OpenAI-compatible model provider, set `SUMMARY_MODE=openai` and fill either the generic `LLM_*` variables or the Agnes aliases:
-
-如果使用 Agnes AI 或其他 OpenAI-compatible 模型服务，把 `SUMMARY_MODE` 设为 `openai`，再填写通用的 `LLM_*`，或填写 Agnes 别名变量：
-
-```dotenv
-SUMMARY_MODE=openai
-AGNES_BASE_URL=
-AGNES_API_KEY=
-AGNES_MODEL=
+```powershell
+.\scripts\stop-worker.ps1
 ```
 
-Use the base URL and model name shown in the Agnes API key/model settings page. Do not commit `.env`.
+## 作为 Codex Skill 使用
 
-`AGNES_BASE_URL` 和 `AGNES_MODEL` 使用 Agnes API Key/模型设置页展示的地址和模型名。不要提交 `.env`。
+本项目同时是一个 [Codex](https://openai.com/codex) Skill，可用于安装、检查、启动和维护。
 
-## Run / 运行
+安装方式见 [docs/安装部署与日常使用说明.md](docs/安装部署与日常使用说明.md)。
 
-First login should be done visibly:
+## 输入与输出示例
 
-首次登录建议可见运行：
+见 [examples/](examples/) 目录。全部使用合成数据，不含真实用户信息。
 
-```bash
-DOUYIN_OFFSCREEN=false pnpm monitor
-```
-
-After login state is saved in `.browser/douyin`, use the normal background mode:
-
-登录态保存到 `.browser/douyin` 后，使用后台模式：
-
-```bash
-pnpm monitor
-```
-
-To manually test browser-mediated Douyin media capture for one URL:
-
-手工测试单条抖音链接的浏览器媒体捕获：
-
-```bash
-pnpm probe:media "https://www.douyin.com/jingxuan?modal_id=..."
-```
-
-This command saves media from the exact matching Douyin detail response under `data/media/`. If the target resource cannot be verified, it fails instead of downloading unrelated page media. It does not print or persist signed media URLs.
-
-该命令只会把抖音详情接口中与目标作品精确匹配的媒体保存到 `data/media/`。无法核验目标资源时会直接失败，不会下载页面里的其他视频；同时不会打印或持久化签名媒体直链。
-
-To transcribe a local audio or video file with Whisper `base`:
-
-使用 Whisper `base` 转写本地音频或视频文件：
-
-```bash
-pnpm transcribe:whisper data/media/aweme_7650000000000000000.mp4 --language zh
-```
-
-Whisper may emit Traditional Chinese even when `--language zh` is set. The background worker converts transcripts and generated summaries to Simplified Chinese before writing them to Feishu.
-
-Whisper 即使设置了 `--language zh`，仍可能输出繁体中文。后台处理器会在写入飞书前，把转写全文和生成的摘要统一转换为简体中文。
-
-If you use the desktop launcher, double-click the command file in the project root:
-
-如果使用桌面启动方式，双击项目根目录里的命令文件：
+## Obsidian 最终笔记结构
 
 ```text
-./启动抖音监控.command
+<标题> - <完整平台作品ID>.md
 ```
 
-Keep the terminal window open while monitoring. Press `Ctrl+C` in that window to stop.
+笔记包含：标题、作者、平台、发布时间、原始链接、内容提要、完整逐字稿、AI 分类、值得保存的信息。
 
-监控时保持终端窗口打开。需要停止时在该窗口按 `Ctrl+C`。
+## 支持平台
 
-## Privacy / 隐私
+| 平台 | 状态 | 说明 |
+|---|---|---|
+| 抖音 | 正式支持 | v1.0.0 |
+| 公众号 | 下一优先级 | 规划中 |
+| B站 | Planned | 未实现 |
+| YouTube | Planned | 未实现 |
+| 推特 / X | Planned | 未实现 |
+| 小红书 | Planned | 未实现 |
 
-- `.env`, `.browser/`, `data/`, `logs/`, and `.venv/` are ignored by Git and must remain local. They can contain credentials, login state, downloaded videos, transcripts, and private-message-derived records.
-- The monitor does not print or persist signed media URLs, cookies, or request headers.
-- `SUMMARY_MODE=mock` does not call an external summary model. With `SUMMARY_MODE=openai`, the title and transcript are sent to the configured OpenAI-compatible provider, such as Agnes AI, to generate the summary.
-- Feishu receives only the fields listed in the field contract above.
+目录中存在不等于功能已实现。遇到未支持平台时，Worker 会明确拒绝而非伪装成成功。
 
-- `.env`、`.browser/`、`data/`、`logs/`、`.venv/` 已被 Git 忽略，必须只保留在本地；其中可能包含密钥、登录状态、下载视频、转写全文和来源于私信的记录。
-- 监控不会打印或持久化签名媒体直链、Cookie 或请求头。
-- `SUMMARY_MODE=mock` 不调用外部摘要模型；使用 `SUMMARY_MODE=openai` 时，标题和转写全文会发送给已配置的 OpenAI-compatible 服务（例如 Agnes AI）生成摘要。
-- 飞书只接收上文字段契约中列出的字段。
-
-## Verify / 验证
+## 质量与测试
 
 ```bash
-pnpm test
-pnpm typecheck
+pnpm typecheck    # TypeScript 类型检查
+pnpm test         # 25 个测试文件，229 项测试
 ```
 
-Manual validation steps are in [docs/manual-smoke-test.md](docs/manual-smoke-test.md).
+```powershell
+.\scripts\validate-skill.ps1   # 项目校验
+```
 
-手工验收步骤见 [docs/manual-smoke-test.md](docs/manual-smoke-test.md)。
+## 文档
 
-## 许可证
+完整文档索引见 [docs/README.md](docs/README.md)。
 
-本项目采用 MIT License。允许使用、复制、修改和二次发布，但须保留原作者版权声明及 LICENSE。
+## Roadmap
 
-原作者：乔巴
+见 [ROADMAP.md](ROADMAP.md)。
+
+## Security
+
+见 [SECURITY.md](SECURITY.md)。
+
+公共仓库不得包含：`.env`、App Secret、API Key、Token、Cookie、个人飞书 App ID、Base 标识、Obsidian 绝对路径、真实视频、真实逐字稿和笔记。
+
+## Contributing
+
+见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+## License
+
+MIT License。原作者：乔巴。
+
+见 [LICENSE](LICENSE)。
