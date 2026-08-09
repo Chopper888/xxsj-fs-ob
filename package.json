@@ -1,0 +1,32 @@
+{
+  "name": "douyin-share",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "monitor": "tsx src/cli/monitor.ts",
+    "login": "tsx scripts/manual-login.ts",
+    "task:process": "tsx scripts/process-base-task.ts",
+    "task:analyze": "tsx scripts/analyze-base-task.ts",
+    "task:preview": "tsx scripts/generate-markdown-preview.ts",
+    "task:asr-compare": "tsx scripts/run-asr-comparison.ts",
+    "task:qwen-asr": "tsx scripts/run-qwen-asr.ts",
+    "probe:media": "tsx scripts/probe-douyin-media.ts",
+    "transcribe:whisper": "node -e \"const{spawnSync}=require('child_process'),p=require('path');const py=process.platform==='win32'?p.join('.venv','Scripts','python.exe'):p.join('.venv','bin','python');process.exit(spawnSync(py,['scripts/transcribe-whisper.py',...process.argv.slice(1)],{stdio:'inherit'}).status??1)\"",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "opencc-js": "1.4.1",
+    "playwright": "^1.49.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "4.20.6",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

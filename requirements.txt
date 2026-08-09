@@ -1,0 +1,2 @@
+openai-whisper==20250625
+faster-whisper==1.2.1
