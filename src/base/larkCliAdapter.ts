@@ -3,12 +3,19 @@ import { writeFile, unlink, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 
-const LARK_CLI = "lark-cli.cmd";
 const BASE_FIELD_NAMES = [
   "标题", "原文链接", "来源平台", "作者", "日期", "一级标签", "概述",
   "二级标签", "去重ID", "处理状态", "备注", "重试次数", "最近错误",
   "处理时间", "知识库路径", "收藏时间",
 ];
+
+export function resolveLarkIdentity(value: string | undefined): "bot" | "user" {
+  return value?.trim().toLowerCase() === "user" ? "user" : "bot";
+}
+
+export function resolveLarkCliBin(value: string | undefined): string {
+  return value?.trim() || "lark-cli";
+}
 
 export class LarkCliAdapter {
   private profile: string;
@@ -22,7 +29,9 @@ export class LarkCliAdapter {
 
   private exec(args: string[], stdin?: string): any {
     const profileFlag = this.profile ? ` --profile ${this.profile}` : "";
-    const cmd = `"${LARK_CLI}"${profileFlag} base ${args.join(" ")} --base-token ${this.baseToken} --table-id ${this.tableId}`;
+    const identity = resolveLarkIdentity(process.env.LARK_IDENTITY);
+    const larkCli = resolveLarkCliBin(process.env.LARK_CLI_BIN);
+    const cmd = `"${larkCli}"${profileFlag} base ${args.join(" ")} --as ${identity} --base-token ${this.baseToken} --table-id ${this.tableId}`;
     const opts: any = { encoding: "utf8", maxBuffer: 50 * 1024 * 1024, shell: true, timeout: 30000 };
     if (stdin) opts.input = stdin;
     try {
@@ -49,13 +58,15 @@ export class LarkCliAdapter {
 
   recordList(): Array<{ record_id: string; fields: Record<string,unknown> }> {
     const j = this.exec(["+record-list", "--page-size", "50", "--format", "json"]);
+    if (Array.isArray(j.data?.items)) return j.data.items;
     const fields = j.data?.fields as string[] | undefined;
     const rows = j.data?.data as unknown[][] | undefined;
+    const recordIds = j.data?.record_id_list as string[] | undefined;
     if (!fields) throw new Error("lark:unexpected_list_format");
-    return (rows ?? []).map(row => {
+    return (rows ?? []).map((row, rowIndex) => {
       const f: Record<string,unknown> = {};
       for (let i = 0; i < fields.length; i++) f[fields[i]] = row[i];
-      const rid = (row as any)._record_id ?? "";
+      const rid = recordIds?.[rowIndex] ?? "";
       return { record_id: rid, fields: f };
     });
   }

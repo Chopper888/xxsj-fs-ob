@@ -231,8 +231,17 @@ if (Test-Path $cmdPath) {
     if ($cmdText -match '^\s*@echo off') { Pass "CMD starts with @echo off" }
     else { Fail "CMD does not start with @echo off" }
     
-    if ($cmdText -match 'chcp 65001') { Pass "CMD sets UTF-8 codepage" }
-    else { Warn "CMD missing chcp 65001" }
+    $nonAscii = @($cmdBytes | Where-Object { $_ -gt 0x7F }).Count
+    if ($nonAscii -eq 0) { Pass "CMD is ASCII-only" }
+    else { Fail "CMD contains $nonAscii non-ASCII bytes" }
+
+    $crlfCount = ([regex]::Matches($cmdText, "`r`n")).Count
+    $bareLfCount = ([regex]::Matches($cmdText, "(?<!`r)`n")).Count
+    if ($crlfCount -gt 0 -and $bareLfCount -eq 0) { Pass "CMD uses CRLF line endings" }
+    else { Fail "CMD line endings are not CRLF-only" }
+
+    if ($cmdText -notmatch '(?im)^\s*chcp\s') { Pass "CMD does not depend on chcp" }
+    else { Fail "CMD must not depend on chcp" }
     
     if ($cmdText -match '%~dp0start-xxsj-fs-ob-worker\.ps1') { Pass "CMD uses %~dp0 for PS1" }
     else { Fail "CMD missing %~dp0 reference to PS1" }

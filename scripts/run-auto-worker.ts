@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { randomUUID, createHash } from "node:crypto";
 import { LarkCliAdapter } from "../src/base/larkCliAdapter.js";
 import {
-  tryAcquireLock, releaseLock, saveStage, readStage, resolveMediaUrlForAsr, validateRecordId, validateBaseFields,
+  tryAcquireLock, releaseLock, readLock, saveStage, readStage, resolveMediaUrlForAsr, validateRecordId, validateBaseFields,
   mediaExists, asrRawExists, analysisCacheExists,
   determineResumeStage, sha256, type ProcessStage,
 } from "../src/worker/autoWorker.js";
@@ -14,6 +14,7 @@ import { buildOrchestratorConfigFromEnv } from "../src/asr/providers.js";
 import { parseAndValidateAnalysis, buildAnalysisSystemPrompt } from "../src/analysis/contentAnalysis.js";
 import { OpenAICompatibleSummaryClient } from "../src/summary/openaiCompatibleClient.js";
 import { loadConfigFromEnv } from "../src/config.js";
+import { selectRunnableRecordIds, shouldContinuePolling } from "../src/worker/workerLifecycle.js";
 
 const root = resolve(import.meta.dirname, "..");
 const LARK_CLI = "lark-cli.cmd";
@@ -29,6 +30,7 @@ function parseArgs(argv: string[]) {
     maxTasks: Number(v("--max-tasks") ?? "4"),
     runOnce: argv.includes("--run-once"),
     idleTimeoutMs: Number(v("--idle-timeout-seconds") ?? "180") * 1000,
+    pollIntervalMs: Number(v("--poll-interval-seconds") ?? "10") * 1000,
     faultAfterStage: v("--fault-after-stage") as ProcessStage | undefined,
   };
 }
@@ -218,21 +220,35 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   console.log(`Worker: ids=${args.recordIds.join(",")} maxTasks=${args.maxTasks} runOnce=${args.runOnce} fault=${args.faultAfterStage || "none"}`);
 
-  if (!args.recordIds.length) { console.log("需要 --record-ids"); process.exit(1); }
   if (!(await tryAcquireLock(root, "auto-worker"))) { console.error("Worker已在运行"); process.exit(1); }
+  const lock = await readLock(root);
+  const lockToken = String(lock?.token ?? "");
+  if (!lockToken) throw new Error("worker_lock_token_missing");
 
   let shouldStop = false;
   process.on("SIGINT", () => { shouldStop = true; console.log("\nSIGINT, 优雅停止..."); });
   process.on("SIGTERM", () => { shouldStop = true; });
 
+  const stopPath = join(root, "worker.stop");
   let completed = 0;
-  for (const rid of args.recordIds) {
-    if (shouldStop || completed >= args.maxTasks) break;
-    try { await processTask(rid, args.faultAfterStage); completed++; }
-    catch (e) { console.error(`[${rid.slice(-8)}] 失败: ${e instanceof Error ? e.message : String(e)}`); try { await updateRecord(rid, { "处理状态": "failed", "最近错误": String(e) }); } catch {} }
+  try {
+    do {
+      try { await readFile(stopPath); shouldStop = true; } catch {}
+      if (shouldStop) break;
+      const recordIds = args.recordIds.length ? args.recordIds : selectRunnableRecordIds(larkAdapter.recordList(), args.maxTasks);
+      for (const rid of recordIds) {
+        if (shouldStop || completed >= args.maxTasks) break;
+        try { await processTask(rid, args.faultAfterStage); completed++; }
+        catch (e) { console.error(`[${rid.slice(-8)}] 失败: ${e instanceof Error ? e.message : String(e)}`); try { await updateRecord(rid, { "处理状态": "failed", "最近错误": String(e) }); } catch {} }
+      }
+      if (args.recordIds.length || !shouldContinuePolling({ runOnce: args.runOnce, stopRequested: shouldStop })) break;
+      completed = 0;
+      await new Promise(resolveDelay => setTimeout(resolveDelay, args.pollIntervalMs));
+    } while (true);
+  } finally {
+    await releaseLock(root, lockToken);
+    try { await unlink(stopPath); } catch {}
   }
-
-  await releaseLock(root, "auto-worker");
   console.log(`Worker完成: ${completed}`);
 }
 
