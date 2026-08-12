@@ -147,6 +147,7 @@ if (Test-Path $readmePath) {
 $required = @(
     "scripts\install.ps1", "scripts\doctor.ps1", "scripts\run-once.ps1",
     "scripts\start-worker.ps1", "scripts\stop-worker.ps1",
+    "scripts\status-worker.ps1", "scripts\monitor-worker.ps1",
     "start-xxsj-fs-ob-worker.ps1", "start-xxsj-fs-ob-worker.cmd",
     "docs\安装部署与日常使用说明.md", "docs\运行与停止.md", "docs\部署说明.md"
 )

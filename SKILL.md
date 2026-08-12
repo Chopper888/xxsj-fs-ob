@@ -86,6 +86,9 @@ start-xxsj-fs-ob-worker.cmd
 → scripts\start-worker.ps1
 ```
 
+Skill 根目录是操作包装层；实际 Worker 必须从完整项目运行根启动。正式运行根优先读取
+`XXSJ_FS_OB_PROJECT_ROOT`，也可由启动入口显式传入 `-ProjectRoot`。
+
 `.ps1` 是底层脚本，不作为第三种普通用户启动方式宣传。
 
 ## 常用命令
@@ -106,12 +109,21 @@ start-xxsj-fs-ob-worker.cmd
 # 启动 Worker
 .\scripts\start-worker.ps1
 
+# 查看一次状态快照
+.\scripts\status-worker.ps1
+
+# 打开实时监控（关闭窗口不会停止 Worker）
+.\scripts\monitor-worker.ps1
+
 # 停止 Worker
 .\scripts\stop-worker.ps1
 
 # 缓存清理预演
 .\scripts\cleanup-dry-run.ps1
 ```
+
+不传 `RecordIds` 的 `start-worker.ps1` 是长期轮询 Worker；`run-once.ps1` 是单轮领取并退出；
+为 `run-once.ps1` 传入 `RecordIds` 时只处理指定记录。停止脚本按 lock 中的 PID 精确停止本项目 Worker。
 
 具体参数以脚本帮助和当前 README 为准。
 
@@ -129,7 +141,7 @@ start-xxsj-fs-ob-worker.cmd
 
 当前本机实测安装目录为：
 
-`%USERPROFILE%\.codex\skills\xxsj-fs-ob`（请以实际 Codex 客户端发现的目录为准）
+`%USERPROFILE%\.codex\skills\xxsj-fs-ob`
 
 公开说明中不得把该用户名路径写成其他用户必须照搬的路径。
 
@@ -143,7 +155,7 @@ start-xxsj-fs-ob-worker.cmd
 - 不无限重试；
 - 不同时启动多个 Worker；
 - 不把未支持平台伪装成已支持；
-- 不修改用户自己的飞书应用配置。
+- 不修改"乔巴1号"的独立飞书应用配置。
 
 ## 数据存档
 
@@ -156,4 +168,4 @@ start-xxsj-fs-ob-worker.cmd
 
 ## 版本
 
-`v1.0.0`
+`v1.0.1 candidate`（正式 Release 仍为 `v1.0.0`）

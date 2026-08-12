@@ -14,13 +14,29 @@ import { buildOrchestratorConfigFromEnv } from "../src/asr/providers.js";
 import { parseAndValidateAnalysis, buildAnalysisSystemPrompt } from "../src/analysis/contentAnalysis.js";
 import { OpenAICompatibleSummaryClient } from "../src/summary/openaiCompatibleClient.js";
 import { loadConfigFromEnv } from "../src/config.js";
-import { selectRunnableRecordIds, shouldContinuePolling } from "../src/worker/workerLifecycle.js";
+import { isRetryEligible, prepareAttemptFields, selectRunnableRecordIds, shouldContinuePolling } from "../src/worker/workerLifecycle.js";
+import { createInitialWorkerStatus, maskRecordId, writeWorkerStatus, type WorkerStatus } from "../src/worker/workerStatus.js";
 
 const root = resolve(import.meta.dirname, "..");
 const LARK_CLI = "lark-cli.cmd";
 const BASE_TOKEN = process.env.FEISHU_BASE_TOKEN!;
 const TABLE_ID = process.env.FEISHU_TABLE_ID!;
 const ILLEGAL = /[<>:"/\\|?*]/g;
+let runtimeStatus: WorkerStatus | null = null;
+
+async function publishStatus(patch: Partial<WorkerStatus>): Promise<void> {
+  if (!runtimeStatus) return;
+  runtimeStatus = { ...runtimeStatus, ...patch };
+  await writeWorkerStatus(root, runtimeStatus);
+}
+
+function queueSnapshot(records: Array<{ fields: Record<string, unknown> }>) {
+  const count = (status: string) => records.filter(record => String(record.fields["处理状态"] ?? "") === status).length;
+  return {
+    pending: count("pending"), processing: count("processing"), draft_ready: count("draft_ready"), failed: count("failed"),
+    retry_eligible: records.filter(record => isRetryEligible(record.fields)).length,
+  };
+}
 
 // --- CLI args ---
 function parseArgs(argv: string[]) {
@@ -75,11 +91,25 @@ async function processTask(recordId: string, faultAfterStage?: ProcessStage) {
   const sourceUrl = String(fields["原文链接"] ?? "");
   const title = String(fields["标题"] ?? "");
   const platform = String(fields["来源平台"] ?? "抖音");
+  const taskStartedAt = new Date().toISOString();
 
-  if (!["pending", "draft_ready", "processing"].includes(status)) {
-    console.log(`[${recordId.slice(-8)}] 跳过: 状态=${status}`);
-    return;
+  if (platform !== "抖音") {
+    console.log(`[${recordId.slice(-8)}] 跳过: 不支持平台=${platform}`);
+    return false;
   }
+  if (status === "failed" && !isRetryEligible(fields)) {
+    console.log(`[${recordId.slice(-8)}] 跳过: failed不可自动重试`);
+    return false;
+  }
+  if (!["pending", "draft_ready", "processing", "failed"].includes(status)) {
+    console.log(`[${recordId.slice(-8)}] 跳过: 状态=${status}`);
+    return false;
+  }
+
+  const setStage = async (stage: string, stageIndex: number) => publishStatus({ current_task: {
+    record_id_masked: maskRecordId(recordId), platform, title: title.slice(0, 120), status: "processing",
+    stage, stage_index: stageIndex, stage_total: 8, started_at: taskStartedAt,
+  } });
 
   const saved = await readStage(root, recordId);
   const products = {
@@ -90,14 +120,17 @@ async function processTask(recordId: string, faultAfterStage?: ProcessStage) {
   const resume = determineResumeStage(saved?.stage ?? "pending", products);
   console.log(`[${recordId.slice(-8)}] 开始: w=${workerId} resume=${resume.startFrom} skipDl=${resume.skipDownload} skipQwen=${resume.skipQwen} skipDS=${resume.skipDeepSeek}`);
 
-  if (resume.startFrom === "done") { console.log(`[${recordId.slice(-8)}] 已完成,跳过`); return; }
+  if (resume.startFrom === "done") { console.log(`[${recordId.slice(-8)}] 已完成,跳过`); return false; }
 
   // Claim
-  await updateRecord(recordId, { "处理状态": "processing" });
+  await setStage("claim", 1);
+  await updateRecord(recordId, prepareAttemptFields(fields));
   await saveStage(root, recordId, "claimed");
+  await setStage("metadata", 2);
 
   // Media download
   if (!resume.skipDownload) {
+    await setStage("download", 3);
     console.log(`[${recordId.slice(-8)}] 下载媒体...`);
     const mediaPath = join(root, "data", "tasks", recordId, "media", "source.mp4");
     await mkdir(join(taskDir, "media"), { recursive: true });
@@ -115,6 +148,7 @@ async function processTask(recordId: string, faultAfterStage?: ProcessStage) {
 
   // Qwen ASR
   if (!resume.skipQwen) {
+    await setStage("asr", 4);
     console.log(`[${recordId.slice(-8)}] Qwen-ASR...`);
     const mediaPath = join(root, "data", "tasks", recordId, "media", "source.mp4");
     const transcriptDir = join(taskDir, "transcript");
@@ -139,6 +173,7 @@ async function processTask(recordId: string, faultAfterStage?: ProcessStage) {
 
   // DeepSeek
   if (!resume.skipDeepSeek) {
+    await setStage("deepseek", 5);
     console.log(`[${recordId.slice(-8)}] DeepSeek...`);
     const asr = JSON.parse(await readFile(join(taskDir, "transcript", "whisper.json"), "utf8"));
     let primaryCategories: string[] = ["AI Agent/编程", "Skill/插件/模型", "ComfyUI/AI绘画", "AI行业动态/资讯", "其他"];
@@ -157,6 +192,7 @@ async function processTask(recordId: string, faultAfterStage?: ProcessStage) {
   if (faultAfterStage === "analysis_completed") { console.log("FAULT after analysis_completed"); process.exit(0); }
 
   // Markdown + Obsidian
+  await setStage("markdown", 6);
   const analysis = JSON.parse(await readFile(join(taskDir, "analysis", "result.json"), "utf8"));
   const asr = JSON.parse(await readFile(join(taskDir, "transcript", "whisper.json"), "utf8"));
   const workId = sourceUrl.match(/(?:\/video\/|[?&]modal_id=)(\d+)/)?.[1] ?? recordId;
@@ -187,7 +223,10 @@ async function processTask(recordId: string, faultAfterStage?: ProcessStage) {
   await saveStage(root, recordId, "markdown_ready", mHash);
 
   // Obsidian write
-  const vaultDir = join(process.env.OBSIDIAN_VAULT_PATH + "\" + (process.env.OBSIDIAN_INBOX_DIR ?? "000-Inbox\001-信息中心"), platform);
+  await setStage("obsidian", 7);
+  const vaultRoot = process.env.OBSIDIAN_VAULT_PATH;
+  if (!vaultRoot) throw new Error("OBSIDIAN_VAULT_PATH is required");
+  const vaultDir = join(vaultRoot, process.env.OBSIDIAN_INBOX_DIR ?? "000-Inbox\\001-信息中心", platform);
   await mkdir(vaultDir, { recursive: true });
   const fn = `${sanitizeFilename(title)} - ${workId}.md`;
   const obsPath = join(vaultDir, fn);
@@ -209,10 +248,13 @@ async function processTask(recordId: string, faultAfterStage?: ProcessStage) {
   if (faultAfterStage === "obsidian_written") { console.log("FAULT after obsidian_written"); process.exit(0); }
 
   // Base done
+  await setStage("base_done", 8);
   await updateRecord(recordId, { "处理状态": "done", "知识库路径": obsPath, "处理时间": Date.now() });
   const confirm = await getRecord(recordId);
   console.log(`[${recordId.slice(-8)}] Base done, SHA-256: ${mHash.slice(0, 16)}`);
   await saveStage(root, recordId, "done");
+  await publishStatus({ current_task: null, last_completed: { title: title.slice(0, 120), finished_at: new Date().toISOString(), result: "done" }, last_error: null });
+  return true;
 }
 
 // --- Main ---
@@ -224,6 +266,11 @@ async function main() {
   const lock = await readLock(root);
   const lockToken = String(lock?.token ?? "");
   if (!lockToken) throw new Error("worker_lock_token_missing");
+  runtimeStatus = createInitialWorkerStatus(process.pid, args.pollIntervalMs / 1000);
+  await writeWorkerStatus(root, runtimeStatus);
+  const heartbeat = setInterval(() => {
+    void publishStatus({ last_heartbeat_at: new Date().toISOString() }).catch(() => undefined);
+  }, 5000);
 
   let shouldStop = false;
   process.on("SIGINT", () => { shouldStop = true; console.log("\nSIGINT, 优雅停止..."); });
@@ -235,17 +282,23 @@ async function main() {
     do {
       try { await readFile(stopPath); shouldStop = true; } catch {}
       if (shouldStop) break;
-      const recordIds = args.recordIds.length ? args.recordIds : selectRunnableRecordIds(larkAdapter.recordList(), args.maxTasks);
+
+      const records = larkAdapter.recordList();
+      await publishStatus({ queue: queueSnapshot(records), last_heartbeat_at: new Date().toISOString() });
+      const recordIds = args.recordIds.length ? args.recordIds : selectRunnableRecordIds(records, args.maxTasks);
       for (const rid of recordIds) {
         if (shouldStop || completed >= args.maxTasks) break;
-        try { await processTask(rid, args.faultAfterStage); completed++; }
-        catch (e) { console.error(`[${rid.slice(-8)}] 失败: ${e instanceof Error ? e.message : String(e)}`); try { await updateRecord(rid, { "处理状态": "failed", "最近错误": String(e) }); } catch {} }
+        try { if (await processTask(rid, args.faultAfterStage)) completed++; }
+        catch (e) { const message = e instanceof Error ? e.message : String(e); console.error(`[${rid.slice(-8)}] 失败: ${message}`); await publishStatus({ current_task: null, last_error: { message: message.slice(0, 240), time: new Date().toISOString() } }); try { await updateRecord(rid, { "处理状态": "failed", "最近错误": String(e), "处理时间": Date.now() }); } catch {} }
       }
+
       if (args.recordIds.length || !shouldContinuePolling({ runOnce: args.runOnce, stopRequested: shouldStop })) break;
       completed = 0;
       await new Promise(resolveDelay => setTimeout(resolveDelay, args.pollIntervalMs));
     } while (true);
   } finally {
+    clearInterval(heartbeat);
+    await publishStatus({ worker_state: "stopped", current_task: null, last_heartbeat_at: new Date().toISOString() }).catch(() => undefined);
     await releaseLock(root, lockToken);
     try { await unlink(stopPath); } catch {}
   }

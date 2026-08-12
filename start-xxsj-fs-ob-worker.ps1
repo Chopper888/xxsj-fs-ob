@@ -2,7 +2,8 @@
 param(
     [string]$ProjectRoot,
     [switch]$RunDoctor,
-    [string]$RecordIds
+    [string]$RecordIds,
+    [switch]$NoMonitor
 )
 
 Set-StrictMode -Version Latest
@@ -54,3 +55,11 @@ if (-not $process) { throw "Worker process is not alive after launch: PID $($loc
 Write-Host "Worker PID: $($lock.pid)"
 Write-Host "Worker lock: $lockPath"
 Write-Host "Worker log: $logPath"
+
+if (-not $NoMonitor) {
+    $monitorScript = Join-Path $runtimeRoot 'scripts\monitor-worker.ps1'
+    if (-not (Test-Path -LiteralPath $monitorScript -PathType Leaf)) { throw "Monitor script not found: $monitorScript" }
+    $monitorHost = if (Get-Command pwsh.exe -ErrorAction SilentlyContinue) { 'pwsh.exe' } else { 'powershell.exe' }
+    Start-Process -FilePath $monitorHost -ArgumentList @('-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File',$monitorScript,'-ProjectRoot',$runtimeRoot) -WorkingDirectory $runtimeRoot
+    Write-Host 'Worker Monitor opened.'
+}

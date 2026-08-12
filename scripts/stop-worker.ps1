@@ -1,9 +1,9 @@
 [CmdletBinding()]
-param([int]$TimeoutSeconds = 30)
+param([int]$TimeoutSeconds = 30, [string]$ProjectRoot)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$root = Split-Path -Parent $PSScriptRoot
+$root = if ($ProjectRoot) { $ProjectRoot } elseif ($env:XXSJ_FS_OB_PROJECT_ROOT) { $env:XXSJ_FS_OB_PROJECT_ROOT } else { Split-Path -Parent $PSScriptRoot }
 $lockPath = Join-Path $root 'worker.lock'
 $stopPath = Join-Path $root 'worker.stop'
 if (-not (Test-Path -LiteralPath $lockPath)) { Write-Host 'Worker is not running.'; exit 0 }
