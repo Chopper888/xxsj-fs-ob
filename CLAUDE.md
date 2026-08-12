@@ -17,7 +17,7 @@ This file is the project-specific source of truth for AI agents working in this 
 - Checks: `pnpm test` and `pnpm typecheck`.
 - 主命令：Worker 通过 `scripts/start-worker.ps1` 或 `start-xxsj-fs-ob-worker.cmd` 启动。
 
-## 当前正式支持 (v1.0.0)
+## 当前正式支持 (v1.0.1)
 
 - 抖音视频链接采集和处理
 - 飞书多维表格任务队列
@@ -62,7 +62,7 @@ xxsj-fs-ob/
 │   ├── worker/       # 自动 Worker
 │   └── config.ts     # 配置管理
 ├── scripts/          # PowerShell 和 Python 脚本
-├── tests/            # Vitest 测试 (25 文件, 229 tests)
+├── tests/            # Vitest 测试 (27 文件, 251 tests)
 ├── docs/             # 文档
 ├── config/           # 配置模板
 ├── references/       # 架构参考
@@ -79,7 +79,7 @@ xxsj-fs-ob/
 ## 测试命令
 
 ```bash
-pnpm test          # 25 测试文件, 229 tests
+pnpm test          # 27 测试文件, 251 tests
 pnpm test:watch    # watch 模式
 pnpm typecheck     # TypeScript 类型检查
 ```

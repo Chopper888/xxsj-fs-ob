@@ -9,7 +9,7 @@ Turn shared content into structured knowledge.
 [![Release](https://img.shields.io/github/v/release/Chopper888/xxsj-fs-ob)](https://github.com/Chopper888/xxsj-fs-ob/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/Chopper888/xxsj-fs-ob/actions/workflows/ci.yml/badge.svg)](https://github.com/Chopper888/xxsj-fs-ob/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-229%2F229-brightgreen)](https://github.com/Chopper888/xxsj-fs-ob)
+[![Tests](https://img.shields.io/badge/tests-251%2F251-brightgreen)](https://github.com/Chopper888/xxsj-fs-ob)
 [![Windows](https://img.shields.io/badge/Windows-supported-blue)](https://github.com/Chopper888/xxsj-fs-ob)
 [![Douyin](https://img.shields.io/badge/Douyin-supported-red)](https://github.com/Chopper888/xxsj-fs-ob)
 
@@ -86,6 +86,8 @@ cp .env.example .env
 start-xxsj-fs-ob-worker.cmd
 ```
 
+Worker 会在后台启动并自动打开 Worker Monitor；关闭 Monitor 不会停止 Worker。再次双击时会复用正在运行的 Worker，只重新打开 Monitor。
+
 或让 Codex 帮你：
 
 > 请使用 xxsj-fs-ob 检查 Worker 状态。如果环境正常且 Worker 尚未运行，请启动 Worker。
@@ -122,7 +124,7 @@ Worker 启动后，把你感兴趣的抖音链接发给自己的飞书机器人�
 
 | 平台 | 状态 | 说明 |
 |---|---|---|
-| 抖音 | 正式支持 | v1.0.0 |
+| 抖音 | 正式支持 | v1.0.1 |
 | 公众号 | 下一优先级 | 规划中 |
 | B站 | Planned | 未实现 |
 | YouTube | Planned | 未实现 |
@@ -135,7 +137,7 @@ Worker 启动后，把你感兴趣的抖音链接发给自己的飞书机器人�
 
 ```bash
 pnpm typecheck    # TypeScript 类型检查
-pnpm test         # 25 个测试文件，229 项测试
+pnpm test         # 27 个测试文件，251 项测试
 ```
 
 ```powershell
