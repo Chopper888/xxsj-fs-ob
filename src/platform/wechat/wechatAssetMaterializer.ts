@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { copyFile, mkdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { NormalizedMedia } from "../types.js";
 
@@ -14,8 +14,18 @@ const EXT: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "
 export async function materializeWechatImages(media: NormalizedMedia[], options: WechatAssetOptions): Promise<WechatAssetResult> {
   const fetchImpl = options.fetchImpl ?? fetch; const retries = Math.max(0, Math.min(options.retries ?? 2, 4));
   const dir = join(options.taskDir, "assets"); await mkdir(dir, { recursive: true });
+  const requested = media.filter(x => x.kind === "image" && x.sourceUrl).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  try {
+    const cached = JSON.parse(await readFile(join(dir, "manifest.json"), "utf8")) as { version?: number; articleUrl?: string; assets?: WechatLocalAsset[]; warnings?: string[] };
+    const bySource = new Map((cached.assets ?? []).map(asset => [asset.sourceUrl, asset]));
+    const reusable = requested.map(item => bySource.get(item.sourceUrl!));
+    if (cached.version === 1 && cached.articleUrl === options.articleUrl && reusable.every(Boolean)) {
+      await Promise.all(reusable.map(async asset => { const file = await stat(asset!.localPath); if (!file.isFile() || file.size !== asset!.bytes) throw new Error("asset_cache_invalid"); }));
+      return { assets: reusable as WechatLocalAsset[], warnings: cached.warnings ?? [] };
+    }
+  } catch {}
   const assets: WechatLocalAsset[] = []; const warnings: string[] = [];
-  for (const item of media.filter(x => x.kind === "image" && x.sourceUrl).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
+  for (const item of requested) {
     const sourceUrl = item.sourceUrl!; let lastError = "image_download_failed";
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {

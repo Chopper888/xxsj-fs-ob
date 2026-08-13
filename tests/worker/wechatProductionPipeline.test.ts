@@ -30,6 +30,11 @@ describe("WeChat production text-first pipeline", () => {
     const second = deps(vi.fn(async () => { throw new Error("browser_must_not_run"); })); await runWechatProductionPipeline({ recordId: "rec123456789", taskDir, sourceUrl: content.identity.sourceUrl, declaredPlatform: "公众号", title: "文章", vaultPath: "vault" }, second);
     expect(second.resolveContent).not.toHaveBeenCalled();
   });
+  it("fails before Browser, AI, Obsidian and Base when vault configuration is absent", async () => {
+    const d = deps();
+    await expect(runWechatProductionPipeline({ recordId: "rec123456789", taskDir, sourceUrl: content.identity.sourceUrl, declaredPlatform: "公众号", title: "文章", vaultPath: "" }, d)).rejects.toThrow("obsidian_vault_path_required");
+    expect(d.resolveContent).not.toHaveBeenCalled(); expect(d.analyze).not.toHaveBeenCalled(); expect(d.writeNote).not.toHaveBeenCalled(); expect(d.updateBase).not.toHaveBeenCalled();
+  });
   it("stops before AI and persistence on a verification page", async () => {
     const d = deps(vi.fn(async () => { throw new PlatformAdapterError("verification_required"); }));
     await expect(runWechatProductionPipeline({ recordId: "rec123456789", taskDir, sourceUrl: content.identity.sourceUrl, declaredPlatform: "公众号", title: "文章", vaultPath: "vault" }, d)).rejects.toThrow("verification_required");

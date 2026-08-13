@@ -22,9 +22,11 @@ import { OpenAICompatibleSummaryClient } from "../src/summary/openaiCompatibleCl
 import { loadConfigFromEnv } from "../src/config.js";
 import { isRetryEligible, prepareAttemptFields, selectRunnableRecordIds, shouldContinuePolling } from "../src/worker/workerLifecycle.js";
 import { createInitialWorkerStatus, maskRecordId, writeWorkerStatus, type WorkerStatus } from "../src/worker/workerStatus.js";
+import { resolveRuntimePaths } from "../src/config/runtimePaths.js";
 
 const root = resolve(import.meta.dirname, "..");
 const LARK_CLI = "lark-cli.cmd";
+const LOCAL_RUNTIME_PATHS: { obsidianVaultPath?: string } = {};
 const BASE_TOKEN = process.env.FEISHU_BASE_TOKEN!;
 const TABLE_ID = process.env.FEISHU_TABLE_ID!;
 const ILLEGAL = /[<>:"/\\|?*]/g;
@@ -119,8 +121,9 @@ async function processTask(recordId: string, faultAfterStage?: ProcessStage) {
   const platformContext = { taskDir, signal: new AbortController().signal, logger: { info: (message: string) => console.log(`[${recordId.slice(-8)}] ${message}`), warn: (message: string) => console.warn(`[${recordId.slice(-8)}] ${message}`) } };
 
   if (adapter.platform === "wechat_official_account") {
+    const { obsidianVaultPath } = resolveRuntimePaths(LOCAL_RUNTIME_PATHS, process.env);
     await updateRecord(recordId, prepareAttemptFields(fields));
-    const result = await runWechatProductionPipeline({ recordId, taskDir, sourceUrl, declaredPlatform: platform, title, vaultPath: process.env.OBSIDIAN_VAULT_PATH ?? "" }, {
+    const result = await runWechatProductionPipeline({ recordId, taskDir, sourceUrl, declaredPlatform: platform, title, vaultPath: obsidianVaultPath }, {
       resolveContent: async () => {
         const normalized = await adapter.normalizeUrl({ sourceUrl, declaredPlatform: platform, dedupeKey }, platformContext);
         const identity = await adapter.resolveIdentity(normalized, platformContext);
@@ -130,9 +133,8 @@ async function processTask(recordId: string, faultAfterStage?: ProcessStage) {
       transcribe: async () => { throw new Error("wechat_asr_forbidden"); },
       materializeImages: content => materializeWechatImages(content.media, { taskDir, articleUrl: content.identity.canonicalUrl }),
       persistImages: (content, assets) => {
-        const vaultPath = process.env.OBSIDIAN_VAULT_PATH; if (!vaultPath) throw new Error("OBSIDIAN_VAULT_PATH is required");
         const targetDir = join(process.env.OBSIDIAN_INBOX_DIR ?? "000-Inbox\\001-信息中心", "公众号");
-        return persistWechatAssetsToVault(assets, { vaultPath, targetDir, dedupeKey: content.identity.dedupeKey });
+        return persistWechatAssetsToVault(assets, { vaultPath: obsidianVaultPath, targetDir, dedupeKey: content.identity.dedupeKey });
       },
       analyze: async analysisInput => {
         const config = loadConfigFromEnv(process.env); const primaryCategories = ["AI Agent/编程", "Skill/插件/模型", "ComfyUI/AI绘画", "AI行业动态/资讯", "其他"];

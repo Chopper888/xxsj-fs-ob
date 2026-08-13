@@ -30,6 +30,7 @@ export function classifyWechatProductionError(error: unknown): { retryable: bool
 }
 
 export async function runWechatProductionPipeline(input: WechatPipelineInput, deps: WechatPipelineDependencies): Promise<{ preparationMode: "text-first"; warnings: string[]; notePath: string }> {
+  if (!input.vaultPath.trim()) throw new Error("obsidian_vault_path_required");
   const stage = async (name: typeof WECHAT_MONITOR_STAGES[number]) => deps.setStage(name, WECHAT_MONITOR_STAGES.indexOf(name) + 1);
   await stage("claim"); await stage("resolve");
   let identity: PlatformIdentity | null = null;

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -10,6 +10,15 @@ beforeEach(async () => { dir = join(tmpdir(), `wx-assets-${randomUUID()}`); awai
 afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
 
 describe("WeChat image materialization", () => {
+  it("reuses a complete task-local manifest without network downloads", async () => {
+    const assetDir = join(dir, "assets"); await mkdir(assetDir, { recursive: true });
+    const localPath = join(assetDir, "001-existing.png"); await writeFile(localPath, new Uint8Array([1, 2, 3]));
+    const sourceUrl = "https://mmbiz.qpic.cn/example/reuse";
+    await writeFile(join(assetDir, "manifest.json"), JSON.stringify({ version: 1, articleUrl: "https://mp.weixin.qq.com/s/a", assets: [{ sourceUrl, localPath, markdownPath: "assets/001-existing.png", order: 1, contentType: "image/png", bytes: 3 }], warnings: [] }));
+    const fetchImpl = vi.fn();
+    const result = await materializeWechatImages([{ kind: "image", role: "context", sourceUrl, order: 1 }], { taskDir: dir, articleUrl: "https://mp.weixin.qq.com/s/a", fetchImpl: fetchImpl as typeof fetch });
+    expect(fetchImpl).not.toHaveBeenCalled(); expect(result.assets).toHaveLength(1); expect(result.assets[0].localPath).toBe(localPath);
+  });
   it("uses referer, deterministic names, and writes a manifest", async () => {
     const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       expect(new Headers(init?.headers).get("referer")).toBe("https://mp.weixin.qq.com/s/a");
