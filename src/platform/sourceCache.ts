@@ -11,7 +11,7 @@ function valid(value: unknown, expected: PlatformIdentity): value is NormalizedC
   const content = value as NormalizedContent;
   return content.contentType === "article"
     && content.identity?.platform === expected.platform
-    && (!expected.dedupeKey || content.identity?.dedupeKey === expected.dedupeKey)
+    && (!expected.dedupeKey || content.identity?.dedupeKey === expected.dedupeKey || Boolean(content.identity?.dedupeAliases?.includes(expected.dedupeKey)))
     && content.identity?.canonicalUrl === expected.canonicalUrl
     && content.texts?.some(part => part.role === "primary" && part.text.trim().length >= 20);
 }

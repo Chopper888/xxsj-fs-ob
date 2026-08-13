@@ -14,5 +14,10 @@ afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
 describe("normalized source cache", () => {
   it("round-trips a validated article", async () => { await saveNormalizedContentCache(dir, content); expect((await loadNormalizedContentCache(dir, content.identity))?.title).toBe("文章"); });
   it("rejects a cache belonging to another identity", async () => { await saveNormalizedContentCache(dir, content); expect(await loadNormalizedContentCache(dir, { ...content.identity, dedupeKey: "wechat:other" })).toBeNull(); });
+  it("resumes a legacy external dedupe through its canonical alias", async () => {
+    const legacy = { ...content, identity: { ...content.identity, dedupeKey: "weixin:article-id", dedupeAliases: [content.identity.dedupeKey] } };
+    await saveNormalizedContentCache(dir, legacy);
+    expect((await loadNormalizedContentCache(dir, content.identity))?.identity.dedupeKey).toBe("weixin:article-id");
+  });
   it("does not persist a raw source URL carrying transient query credentials", async () => { const unsafe = { ...content, identity: { ...content.identity, sourceUrl: `${content.identity.canonicalUrl}?pass_ticket=secret` } }; await saveNormalizedContentCache(dir, unsafe); expect((await loadNormalizedContentCache(dir, content.identity))?.identity.sourceUrl).toBe(content.identity.canonicalUrl); });
 });

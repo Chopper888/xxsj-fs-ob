@@ -10,6 +10,7 @@ describe("production adapter registry", () => {
     });
     expect(registry.resolve({ sourceUrl: "https://www.douyin.com/video/1234567890123456789", declaredPlatform: "抖音" }).platform).toBe("douyin");
     expect(registry.resolve({ sourceUrl: "https://mp.weixin.qq.com/s/abc", declaredPlatform: "公众号" }).platform).toBe("wechat_official_account");
+    expect(registry.resolve({ sourceUrl: "https://mp.weixin.qq.com/s/abc", declaredPlatform: "微信公众号" }).platform).toBe("wechat_official_account");
   });
   it("rejects declared-platform mismatches and unsupported URLs", () => {
     const registry = createProductionAdapterRegistry({ projectRoot: process.cwd() });

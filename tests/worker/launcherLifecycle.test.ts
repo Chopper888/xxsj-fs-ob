@@ -63,13 +63,17 @@ describe("Worker polling policy", () => {
   ];
 
   it("selects supported WeChat records in the unified queue", () => {
-    const input = [{ record_id: "recWechat001", fields: { "处理状态": "pending", "来源平台": "公众号" } }];
-    expect(selectRunnableRecordIds(input, 4)).toEqual(["recWechat001"]);
+    const input = [
+      { record_id: "recWechat001", fields: { "处理状态": "pending", "来源平台": "公众号" } },
+      { record_id: "recWechat002", fields: { "处理状态": "pending", "来源平台": "微信公众号" } },
+    ];
+    expect(selectRunnableRecordIds(input, 4)).toEqual(["recWechat001", "recWechat002"]);
   });
 
   it("bounds verification retries but permits transient WeChat network retries", () => {
     expect(isRetryEligible({ "处理状态": "failed", "来源平台": "公众号", "重试次数": 0, "最近错误": "verification_required" })).toBe(false);
     expect(isRetryEligible({ "处理状态": "failed", "来源平台": "公众号", "重试次数": 0, "最近错误": "temporary_network" })).toBe(true);
+    expect(isRetryEligible({ "处理状态": "failed", "来源平台": "微信公众号", "重试次数": 0, "最近错误": "temporary_network" })).toBe(true);
   });
 
   it("automatically selects pending and recoverable failed records", () => {

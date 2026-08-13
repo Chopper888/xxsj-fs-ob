@@ -48,4 +48,22 @@ describe("WechatOfficialAccountAdapter", () => {
     expect(content.identity.canonicalUrl).toBe("https://mp.weixin.qq.com/s/final-article");
     expect(content.identity.dedupeKey).toBe(buildWechatIdentity(redirected.url).dedupeKey);
   });
+  it("preserves an incoming weixin identity and retains canonical WeChat identity as an alias", async () => {
+    const capture = vi.fn().mockResolvedValue(fixture("normal-article"));
+    const adapter = new WechatOfficialAccountAdapter({ capture });
+    const normalized = await adapter.normalizeUrl({ sourceUrl: "https://mp.weixin.qq.com/s/example", dedupeKey: "weixin:example-article-id" }, context);
+    const identity = await adapter.resolveIdentity(normalized, context);
+    expect(identity.dedupeKey).toBe("weixin:example-article-id");
+    expect(identity.dedupeAliases).toContain(buildWechatIdentity(normalized.canonicalUrl).dedupeKey);
+    const content = await adapter.resolveContent(identity, context);
+    expect(content.identity.dedupeKey).toBe("weixin:example-article-id");
+    expect(content.identity.dedupeAliases).toContain(buildWechatIdentity(fixture("normal-article").url).dedupeKey);
+  });
+
+  it("uses canonical wechat identity when the incoming record has no dedupe key", async () => {
+    const adapter = new WechatOfficialAccountAdapter({ capture: vi.fn().mockResolvedValue(fixture("normal-article")) });
+    const normalized = await adapter.normalizeUrl({ sourceUrl: fixture("normal-article").url }, context);
+    const identity = await adapter.resolveIdentity(normalized, context);
+    expect(identity.dedupeKey).toMatch(/^wechat:[a-f0-9]{64}$/);
+  });
 });
