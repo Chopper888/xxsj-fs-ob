@@ -8,7 +8,7 @@ import {
   mediaExists, asrRawExists, analysisCacheExists,
   determineResumeStage, sha256, type ProcessStage,
 } from "../src/worker/autoWorker.js";
-import { captureDouyinMediaWithBrowser } from "../src/media/douyinMediaCapture.js";
+import { createDouyinWorkerPlatformBridge } from "../src/platform/douyin/workerPlatformBridge.js";
 import { transcribeWithFallback } from "../src/asr/asrOrchestrator.js";
 import { buildOrchestratorConfigFromEnv } from "../src/asr/providers.js";
 import { parseAndValidateAnalysis, buildAnalysisSystemPrompt } from "../src/analysis/contentAnalysis.js";
@@ -52,6 +52,7 @@ function parseArgs(argv: string[]) {
 }
 
 const larkAdapter = new LarkCliAdapter(process.env.FEISHU_BASE_TOKEN!, process.env.FEISHU_TABLE_ID!, "data");
+const platformBridge = createDouyinWorkerPlatformBridge({ root });
 
 async function baseApi(path: string, method = "GET", body?: unknown): Promise<any> {
   if (method === "GET") {
@@ -91,6 +92,7 @@ async function processTask(recordId: string, faultAfterStage?: ProcessStage) {
   const sourceUrl = String(fields["原文链接"] ?? "");
   const title = String(fields["标题"] ?? "");
   const platform = String(fields["来源平台"] ?? "抖音");
+  const dedupeKey = String(fields["去重ID"] ?? "").trim() || undefined;
   const taskStartedAt = new Date().toISOString();
 
   if (platform !== "抖音") {
@@ -134,10 +136,8 @@ async function processTask(recordId: string, faultAfterStage?: ProcessStage) {
     console.log(`[${recordId.slice(-8)}] 下载媒体...`);
     const mediaPath = join(root, "data", "tasks", recordId, "media", "source.mp4");
     await mkdir(join(taskDir, "media"), { recursive: true });
-    const media = await captureDouyinMediaWithBrowser({
-      inputUrl: sourceUrl, outputPath: mediaPath,
-      userDataDir: join(root, ".browser", "douyin"), headless: false, timeoutMs: 30000,
-    }, () => {});
+    const resolved = await platformBridge.resolveAndMaterialize({ sourceUrl, declaredPlatform: platform, dedupeKey, taskDir });
+    const media = { resolvedUrl: resolved.media.mediaUrl ?? "", bytes: resolved.media.bytes ?? 0 };
     await writeFile(join(taskDir, "metadata.json"), JSON.stringify({
       sourceUrl, resolvedUrl: media.resolvedUrl, bytes: media.bytes, downloadedAt: new Date().toISOString(),
     }, null, 2), "utf8");
