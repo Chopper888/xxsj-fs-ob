@@ -27,7 +27,8 @@ export async function loadNormalizedContentCache(taskDir: string, expected: Plat
 export async function saveNormalizedContentCache(taskDir: string, content: NormalizedContent): Promise<void> {
   const dir = join(taskDir, "source"); await mkdir(dir, { recursive: true });
   const target = normalizedContentCachePath(taskDir); const temp = `${target}.tmp-${process.pid}-${Date.now()}`;
-  await writeFile(temp, JSON.stringify({ schemaVersion: CACHE_VERSION, capturedAt: new Date().toISOString(), sourceFingerprint: fingerprint(content), normalizedContent: content }, null, 2) + "\n", "utf8");
+  const cacheSafeContent: NormalizedContent = { ...content, identity: { ...content.identity, sourceUrl: content.identity.canonicalUrl } };
+  await writeFile(temp, JSON.stringify({ schemaVersion: CACHE_VERSION, capturedAt: new Date().toISOString(), sourceFingerprint: fingerprint(cacheSafeContent), normalizedContent: cacheSafeContent }, null, 2) + "\n", "utf8");
   await rename(temp, target);
 }
 
