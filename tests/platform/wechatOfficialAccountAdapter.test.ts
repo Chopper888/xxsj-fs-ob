@@ -2,10 +2,21 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { WechatOfficialAccountAdapter } from "../../src/platform/wechat/wechatOfficialAccountAdapter.js";
 import { buildWechatIdentity } from "../../src/platform/wechat/wechatUrl.js";
+import { chromium } from "playwright";
+import { WECHAT_SNAPSHOT_SCRIPT } from "../../src/platform/wechat/wechatBrowserCapture.js";
 const fixture = (name: string) => JSON.parse(readFileSync(new URL(`../fixtures/wechat/${name}.json`, import.meta.url), "utf8"));
 const context = { taskDir: "data/test-wechat", signal: new AbortController().signal, logger: { info: vi.fn(), warn: vi.fn() } };
 
 describe("WechatOfficialAccountAdapter", () => {
+  it("runs the snapshot extractor inside an isolated browser context", async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const page = await browser.newPage();
+      await page.setContent('<h1 id="activity-name">标题</h1><span id="js_name">账号</span><div id="js_content"><p>这是一段足够长的公众号合成正文，用于验证浏览器执行上下文不会依赖 Node helper。</p></div>');
+      const snapshot = await page.evaluate(WECHAT_SNAPSHOT_SCRIPT);
+      expect(snapshot).toMatchObject({ title: "标题", account: "账号" });
+    } finally { await browser.close(); }
+  });
   it("resolves browser capture into article NormalizedContent", async () => {
     const capture = vi.fn().mockResolvedValue(fixture("normal-article"));
     const adapter = new WechatOfficialAccountAdapter({ capture });
@@ -16,7 +27,7 @@ describe("WechatOfficialAccountAdapter", () => {
     expect(capture).toHaveBeenCalledWith(expect.objectContaining({ userDataDir: expect.stringMatching(/[\\/]\.browser[\\/]wechat$/) }));
     expect(content).toMatchObject({ contentType: "article", title: "合成公众号文章", author: { name: "示例公众号" } });
     expect(content.texts[0]).toMatchObject({ kind: "body", role: "primary" });
-    expect(content.sourceMetadata).toEqual({ accountName: "示例公众号", imageCount: 0, browserStrategy: "browser-first" });
+    expect(content.sourceMetadata).toEqual({ accountName: "示例公众号", imageCount: 0, rawBodyImageCount: 0, imageDiagnostics: null, browserStrategy: "browser-first" });
   });
 
   it("propagates typed validation errors without Base, AI or Obsidian dependencies", async () => {

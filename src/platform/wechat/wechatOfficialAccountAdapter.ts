@@ -21,6 +21,6 @@ export class WechatOfficialAccountAdapter implements PlatformAdapter {
     catch (error) { const message = error instanceof Error ? error.message : String(error); throw new PlatformAdapterError(/timeout/i.test(message) ? "browser_timeout" : "temporary_network", message.slice(0, 120)); }
     validateWechatArticlePage(page); const parsed = parseWechatArticle(page); const finalIdentity = buildWechatIdentity(page.url);
     return { identity: { ...finalIdentity, sourceUrl: identity.sourceUrl }, contentType: "article", title: parsed.title, author: { name: parsed.account }, publishedAt: parsed.publishedAt,
-      texts: [{ kind: "body", role: "primary", text: parsed.body, language: "zh-CN" }], media: parsed.images.map(x => ({ kind: "image", role: "context", ...x })), links: [{ url: finalIdentity.canonicalUrl, role: "source" }], sourceMetadata: { accountName: parsed.account, imageCount: parsed.images.length, browserStrategy: "browser-first" } };
+      texts: [{ kind: "body", role: "primary", text: parsed.body, language: "zh-CN" }], media: parsed.images.map(x => ({ kind: "image", role: "context", ...x })), links: [{ url: finalIdentity.canonicalUrl, role: "source" }], sourceMetadata: { accountName: parsed.account, imageCount: parsed.images.length, rawBodyImageCount: page.images.length, imageDiagnostics: page.imageDiagnostics ?? null, browserStrategy: "browser-first" } };
   }
 }

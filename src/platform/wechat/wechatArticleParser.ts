@@ -10,6 +10,6 @@ export function parseWechatArticle(page: WechatPageSnapshot): ParsedWechatArticl
   }
   return { title: page.title.trim(), account: page.account.trim(), publishedAt: page.publishedAt,
     body: parts.length ? parts.join("\n\n") : page.bodyText.trim(),
-    images: page.images.filter(img => { const url = img.dataSrc || img.src || ""; return Boolean(url) && !url.startsWith("data:") && !((img.width ?? 2) <= 1 && (img.height ?? 2) <= 1) && !/二维码|qr\s*code/i.test(img.alt ?? ""); }).map((img, i) => { const sourceUrl = img.dataSrc || img.src || ""; return { sourceUrl, order: i + 1, alt: img.alt || undefined, context: [img.contextBefore, img.contextAfter].filter(Boolean).join(" / ") || undefined, mimeType: sourceUrl ? mime(sourceUrl) : undefined }; }),
+    images: page.images.filter(img => { const url = img.dataSrc || img.src || ""; const trackingPixel = !img.dataSrc && img.width === 1 && img.height === 1; return Boolean(url) && !url.startsWith("data:") && !trackingPixel && !/二维码|qr\s*code/i.test(img.alt ?? ""); }).map((img, i) => { const sourceUrl = img.dataSrc || img.src || ""; return { sourceUrl, order: i + 1, alt: img.alt || undefined, context: [img.contextBefore, img.contextAfter].filter(Boolean).join(" / ") || undefined, mimeType: sourceUrl ? mime(sourceUrl) : undefined }; }),
   };
 }
