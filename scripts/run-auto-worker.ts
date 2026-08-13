@@ -9,9 +9,15 @@ import {
   determineResumeStage, sha256, type ProcessStage,
 } from "../src/worker/autoWorker.js";
 import { createDouyinWorkerPlatformBridge } from "../src/platform/douyin/workerPlatformBridge.js";
+import { createProductionAdapterRegistry } from "../src/platform/productionRegistry.js";
+import { runWechatProductionPipeline } from "../src/worker/wechatProductionPipeline.js";
+import { materializeWechatImages, persistWechatAssetsToVault } from "../src/platform/wechat/wechatAssetMaterializer.js";
+import { writeMarkdownAtomically } from "../src/obsidian/noteWriter.js";
+import { toAnalysisInput } from "../src/platform/contentPreparation.js";
+import { buildDouyinAnalysisRequest } from "../src/analysis/analysisRequest.js";
 import { transcribeWithFallback } from "../src/asr/asrOrchestrator.js";
 import { buildOrchestratorConfigFromEnv } from "../src/asr/providers.js";
-import { parseAndValidateAnalysis, buildAnalysisSystemPrompt } from "../src/analysis/contentAnalysis.js";
+import { parseAndValidateAnalysis, buildAnalysisSystemPrompt, buildArticleAnalysisSystemPrompt } from "../src/analysis/contentAnalysis.js";
 import { OpenAICompatibleSummaryClient } from "../src/summary/openaiCompatibleClient.js";
 import { loadConfigFromEnv } from "../src/config.js";
 import { isRetryEligible, prepareAttemptFields, selectRunnableRecordIds, shouldContinuePolling } from "../src/worker/workerLifecycle.js";
@@ -53,6 +59,7 @@ function parseArgs(argv: string[]) {
 
 const larkAdapter = new LarkCliAdapter(process.env.FEISHU_BASE_TOKEN!, process.env.FEISHU_TABLE_ID!, "data");
 const platformBridge = createDouyinWorkerPlatformBridge({ root });
+const platformRegistry = createProductionAdapterRegistry({ projectRoot: root });
 
 async function baseApi(path: string, method = "GET", body?: unknown): Promise<any> {
   if (method === "GET") {
@@ -95,10 +102,7 @@ async function processTask(recordId: string, faultAfterStage?: ProcessStage) {
   const dedupeKey = String(fields["去重ID"] ?? "").trim() || undefined;
   const taskStartedAt = new Date().toISOString();
 
-  if (platform !== "抖音") {
-    console.log(`[${recordId.slice(-8)}] 跳过: 不支持平台=${platform}`);
-    return false;
-  }
+  const adapter = platformRegistry.resolve({ sourceUrl, declaredPlatform: platform, dedupeKey });
   if (status === "failed" && !isRetryEligible(fields)) {
     console.log(`[${recordId.slice(-8)}] 跳过: failed不可自动重试`);
     return false;
@@ -112,6 +116,42 @@ async function processTask(recordId: string, faultAfterStage?: ProcessStage) {
     record_id_masked: maskRecordId(recordId), platform, title: title.slice(0, 120), status: "processing",
     stage, stage_index: stageIndex, stage_total: 8, started_at: taskStartedAt,
   } });
+  const platformContext = { taskDir, signal: new AbortController().signal, logger: { info: (message: string) => console.log(`[${recordId.slice(-8)}] ${message}`), warn: (message: string) => console.warn(`[${recordId.slice(-8)}] ${message}`) } };
+
+  if (adapter.platform === "wechat_official_account") {
+    await updateRecord(recordId, prepareAttemptFields(fields));
+    const result = await runWechatProductionPipeline({ recordId, taskDir, sourceUrl, declaredPlatform: platform, title, vaultPath: process.env.OBSIDIAN_VAULT_PATH ?? "" }, {
+      resolveContent: async () => {
+        const normalized = await adapter.normalizeUrl({ sourceUrl, declaredPlatform: platform, dedupeKey }, platformContext);
+        const identity = await adapter.resolveIdentity(normalized, platformContext);
+        return adapter.resolveContent(identity, platformContext);
+      },
+      materializeMedia: async () => { throw new Error("wechat_media_materialization_forbidden"); },
+      transcribe: async () => { throw new Error("wechat_asr_forbidden"); },
+      materializeImages: content => materializeWechatImages(content.media, { taskDir, articleUrl: content.identity.canonicalUrl }),
+      persistImages: (content, assets) => {
+        const vaultPath = process.env.OBSIDIAN_VAULT_PATH; if (!vaultPath) throw new Error("OBSIDIAN_VAULT_PATH is required");
+        const targetDir = join(process.env.OBSIDIAN_INBOX_DIR ?? "000-Inbox\\001-信息中心", "公众号");
+        return persistWechatAssetsToVault(assets, { vaultPath, targetDir, dedupeKey: content.identity.dedupeKey });
+      },
+      analyze: async analysisInput => {
+        const config = loadConfigFromEnv(process.env); const primaryCategories = ["AI Agent/编程", "Skill/插件/模型", "ComfyUI/AI绘画", "AI行业动态/资讯", "其他"];
+        const client = new OpenAICompatibleSummaryClient({ baseUrl: config.summary.baseUrl, apiKey: config.summary.apiKey, model: config.summary.model });
+        const payload = { ...analysisInput, source_record_id: recordId, source_platform: platform, required_provenance: { source_record_id: recordId, source_platform: platform, processor: "local-ai-analysis", model: config.summary.model, processor_version: "1.0.0" } };
+        const raw = await client.completeJson(buildArticleAnalysisSystemPrompt(primaryCategories), payload);
+        return parseAndValidateAnalysis(raw, { recordId, platform, model: config.summary.model, primaryCategories });
+      },
+      writeNote: note => {
+        const inbox = process.env.OBSIDIAN_INBOX_DIR ?? "000-Inbox\\001-信息中心";
+        return writeMarkdownAtomically({ ...note, targetDir: join(inbox, "公众号"), naming: "title-workid" });
+      },
+      updateBase: update => updateRecord(recordId, update),
+      setStage,
+    });
+    await saveStage(root, recordId, "done", JSON.stringify({ path: result.notePath, warnings: result.warnings }));
+    await publishStatus({ current_task: null, last_completed: { title: title.slice(0, 120), finished_at: new Date().toISOString(), result: "done" }, last_error: null });
+    return true;
+  }
 
   const saved = await readStage(root, recordId);
   const products = {
@@ -179,7 +219,11 @@ async function processTask(recordId: string, faultAfterStage?: ProcessStage) {
     let primaryCategories: string[] = ["AI Agent/编程", "Skill/插件/模型", "ComfyUI/AI绘画", "AI行业动态/资讯", "其他"];
 
     const config = loadConfigFromEnv(process.env);
-    const input = { source_record_id: recordId, title, source_platform: platform, source_url: sourceUrl, whisper: { transcript: asr.text, segment_count: asr.segments?.length ?? 0 }, required_provenance: { source_record_id: recordId, source_platform: platform, processor: "local-ai-analysis", model: config.summary.model, processor_version: "1.0.0" } };
+    const normalized = await adapter.normalizeUrl({ sourceUrl, declaredPlatform: platform, dedupeKey }, platformContext);
+    const identity = await adapter.resolveIdentity(normalized, platformContext);
+    const source = { ...(await adapter.resolveContent(identity, platformContext)), title };
+    const analysisInput = toAnalysisInput(recordId, { source, texts: [{ origin: "asr", role: "primary", text: asr.text, provider: asr.provider }], primaryText: asr.text, transcript: { text: asr.text, provider: asr.provider, segments: asr.segments }, preparationMode: "media-first" });
+    const input = buildDouyinAnalysisRequest(analysisInput, { sourcePlatform: platform, sourceUrl, model: config.summary.model, segmentCount: asr.segments?.length ?? 0 });
     const client = new OpenAICompatibleSummaryClient({ baseUrl: config.summary.baseUrl, apiKey: config.summary.apiKey, model: config.summary.model });
     const raw = await client.completeJson(buildAnalysisSystemPrompt(primaryCategories), input);
     const result = parseAndValidateAnalysis(raw, { recordId, platform, model: config.summary.model, primaryCategories });

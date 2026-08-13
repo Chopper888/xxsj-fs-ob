@@ -6,7 +6,8 @@ export interface BaseQueueRecord {
 const MAX_RETRIES = 3;
 const RETRY_BACKOFF_MS = [60_000, 300_000, 900_000] as const;
 const RECOVERABLE_ERROR = /(timeout|timed out|network|temporar|rate.?limit|qwen|deepseek|base_(write|read)|lark_(timeout|exec)|download_(timeout|failed)|terminated)/i;
-const TERMINAL_ERROR = /(unsupported|media_target_id_missing|record_id_|invalid.*(url|format)|not.?found|permission|auth|existing_note_modified)/i;
+const TERMINAL_ERROR = /(unsupported|media_target_id_missing|record_id_|invalid.*(url|format)|not.?found|article_deleted|content_(empty|invalid)|permission|auth|verification|required|access_restricted|existing_note_modified)/i;
+const SUPPORTED_PLATFORMS = new Set(["抖音", "公众号"]);
 
 export function getRetryBackoffMs(retryCount: number): number {
   return RETRY_BACKOFF_MS[Math.min(Math.max(0, retryCount), RETRY_BACKOFF_MS.length - 1)];
@@ -23,7 +24,7 @@ function timestampOf(value: unknown): number | null {
 
 export function isRetryEligible(fields: Record<string, unknown>, now = new Date()): boolean {
   if (String(fields["处理状态"] ?? "") !== "failed") return false;
-  if (String(fields["来源平台"] ?? "") !== "抖音") return false;
+  if (!SUPPORTED_PLATFORMS.has(String(fields["来源平台"] ?? ""))) return false;
   const retryCount = Number(fields["重试次数"] ?? 0);
   if (!Number.isFinite(retryCount) || retryCount >= MAX_RETRIES) return false;
   const error = String(fields["最近错误"] ?? "");
@@ -55,7 +56,7 @@ export function selectRunnableRecordIds(
   now = new Date(),
 ): string[] {
   const prioritized = records.map((record, index) => ({ record, index }))
-    .filter(({ record }) => String(record.fields["来源平台"] ?? "") === "抖音")
+    .filter(({ record }) => SUPPORTED_PLATFORMS.has(String(record.fields["来源平台"] ?? "")))
     .filter(({ record }) => {
       const status = String(record.fields["处理状态"] ?? "");
       return status === "pending" || status === "draft_ready" || isRetryEligible(record.fields, now);

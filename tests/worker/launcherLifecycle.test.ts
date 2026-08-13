@@ -62,6 +62,16 @@ describe("Worker polling policy", () => {
     { record_id: "recFailed0004", fields: { "处理状态": "failed", "来源平台": "抖音", "重试次数": 3, "最近错误": "network_timeout" } },
   ];
 
+  it("selects supported WeChat records in the unified queue", () => {
+    const input = [{ record_id: "recWechat001", fields: { "处理状态": "pending", "来源平台": "公众号" } }];
+    expect(selectRunnableRecordIds(input, 4)).toEqual(["recWechat001"]);
+  });
+
+  it("bounds verification retries but permits transient WeChat network retries", () => {
+    expect(isRetryEligible({ "处理状态": "failed", "来源平台": "公众号", "重试次数": 0, "最近错误": "verification_required" })).toBe(false);
+    expect(isRetryEligible({ "处理状态": "failed", "来源平台": "公众号", "重试次数": 0, "最近错误": "temporary_network" })).toBe(true);
+  });
+
   it("automatically selects pending and recoverable failed records", () => {
     expect(selectRunnableRecordIds(records, 4)).toEqual(["recPending0001", "recRetry00002"]);
   });
