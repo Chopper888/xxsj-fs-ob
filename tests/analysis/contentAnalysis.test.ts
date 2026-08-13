@@ -1,5 +1,5 @@
 ﻿import { describe, expect, it } from "vitest";
-import { parseAndValidateAnalysis } from "../../src/analysis/contentAnalysis.js";
+import { buildAnalysisSystemPrompt, buildArticleAnalysisSystemPrompt, parseAndValidateAnalysis } from "../../src/analysis/contentAnalysis.js";
 
 const valid = {
   summary: "忠实原文的摘要",
@@ -18,6 +18,10 @@ const valid = {
 };
 
 describe("content analysis schema", () => {
+  it("keeps article instructions separate from the Douyin ASR prompt", () => {
+    const douyin = buildAnalysisSystemPrompt(["其他"]); const article = buildArticleAnalysisSystemPrompt(["其他"]);
+    expect(article).toContain("公众号文章"); expect(article).toContain("原文正文"); expect(article).not.toContain("Whisper"); expect(douyin).toContain("Whisper");
+  });
   it("validates string[] useful_information", () => {
     expect(parseAndValidateAnalysis("```json\n" + JSON.stringify(valid) + "\n```", {
       recordId: "rec1", platform: "抖音", model: "deepseek-chat", primaryCategories: ["Skill/插件/模型", "其他"],

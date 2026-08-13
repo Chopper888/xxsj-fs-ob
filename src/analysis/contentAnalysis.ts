@@ -126,3 +126,15 @@ export function buildAnalysisSystemPrompt(primaryCategories: string[]): string {
     "processor固定为local-ai-analysis，processor_version固定为1.0.0。",
   ].join("\n");
 }
+
+export function buildArticleAnalysisSystemPrompt(primaryCategories: string[]): string {
+  return [
+    "你是本地知识库的公众号文章分析器。只输出一个 JSON 对象，不输出解释或 Markdown。",
+    "输入 primaryText 是已经验证的公众号原文正文。必须忠于标题、作者、发布时间和原文正文，禁止补充来源中不存在的事实。",
+    "AI 摘要与要点是分析结果，不得冒充或改写为原文。transcript_corrections 对文章固定返回空数组。",
+    `primary_category 必须且只能从这些选项选择：${JSON.stringify(primaryCategories)}。`,
+    "必填字段及类型：summary 字符串；key_points 字符串数组；primary_category 字符串；secondary_category 字符串；useful_information 字符串数组；action_items 字符串数组；transcript_corrections 空数组；quality_warnings 字符串数组。",
+    "还必须原样返回 source_record_id、source_platform、model，并返回 processor 和 processor_version。",
+    "processor 固定为 local-ai-analysis，processor_version 固定为 1.0.0。",
+  ].join("\n");
+}
