@@ -1,0 +1,7 @@
+import { resolve } from "node:path";
+import { WechatOfficialAccountAdapter } from "../src/platform/wechat/wechatOfficialAccountAdapter.js";
+const url = process.argv[2]; if (!url) { console.error("Usage: tsx scripts/probe-wechat-article.ts <URL>"); process.exit(2); }
+const started = Date.now(); const adapter = new WechatOfficialAccountAdapter({ projectRoot: resolve(import.meta.dirname, ".."), headless: false, timeoutMs: 30000 });
+const context = { taskDir: "data/probes/wechat", signal: new AbortController().signal, logger: { info: () => {}, warn: () => {} } };
+try { const n = await adapter.normalizeUrl({ sourceUrl: url }, context); const i = await adapter.resolveIdentity(n, context); const c = await adapter.resolveContent(i, context); const body = c.texts.find(x => x.role === "primary")?.text ?? ""; console.log(JSON.stringify({ validation: "valid", platform: c.identity.platform, canonicalUrl: c.identity.canonicalUrl, platformContentId: `...${c.identity.platformContentId.slice(-12)}`, title: c.title, account: c.author?.name, publishedAt: c.publishedAt, bodyLength: body.length, preview: body.slice(0, 160), imageCount: c.media.length, elapsedMs: Date.now() - started }, null, 2)); }
+catch (error) { const e = error as { code?: string; message?: string }; console.log(JSON.stringify({ validation: "invalid", errorCode: e.code ?? "content_invalid", message: e.message?.slice(0, 120), elapsedMs: Date.now() - started }, null, 2)); process.exit(1); }

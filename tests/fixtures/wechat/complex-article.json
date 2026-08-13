@@ -1,0 +1,15 @@
+{
+  "url": "https://mp.weixin.qq.com/s/example-complex",
+  "title": "复杂正文结构",
+  "account": "示例公众号",
+  "bodyText": "章节标题\n\n列表一\n列表二\n\n引用内容\n\nconst answer = 42;",
+  "blocks": [
+    { "tag": "h2", "text": "章节标题" },
+    { "tag": "li", "text": "列表一" },
+    { "tag": "li", "text": "列表二" },
+    { "tag": "blockquote", "text": "引用内容" },
+    { "tag": "pre", "text": "const answer = 42;" }
+  ],
+  "images": [],
+  "pageText": "复杂正文结构 章节标题 列表一 列表二 引用内容 const answer = 42;"
+}

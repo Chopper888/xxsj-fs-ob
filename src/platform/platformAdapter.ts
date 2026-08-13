@@ -5,7 +5,7 @@ export interface NormalizedUrl { sourceUrl: string; canonicalUrl: string; dedupe
 export interface SafeLogger { info(message: string): void; warn(message: string): void }
 export interface PlatformRuntimeContext { taskDir: string; signal: AbortSignal; logger: SafeLogger }
 
-export type PlatformAdapterErrorCode = "invalid_url" | "not_found" | "private_content" | "auth_required" | "rate_limited" | "temporary_network" | "content_unavailable" | "media_unavailable";
+export type PlatformAdapterErrorCode = "invalid_url" | "not_found" | "private_content" | "auth_required" | "rate_limited" | "temporary_network" | "content_unavailable" | "media_unavailable" | "unsupported_wechat_url" | "article_not_found" | "article_deleted" | "verification_required" | "access_restricted" | "content_empty" | "content_invalid" | "browser_timeout";
 export class PlatformAdapterError extends Error {
   constructor(public readonly code: PlatformAdapterErrorCode, message: string = code) { super(message); this.name = "PlatformAdapterError"; }
 }

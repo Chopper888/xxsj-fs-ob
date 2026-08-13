@@ -1,0 +1,13 @@
+{
+  "url": "https://mp.weixin.qq.com/s/example-text?__biz=MzExample&mid=1001&idx=1&sn=abc",
+  "title": "合成公众号文章",
+  "account": "示例公众号",
+  "publishedAt": "2026-08-13",
+  "bodyText": "第一段正文，包含足够长度用于验证真实文章内容。\n\n第二段正文继续说明合成测试场景，不包含任何真实用户数据。",
+  "blocks": [
+    { "tag": "p", "text": "第一段正文，包含足够长度用于验证真实文章内容。" },
+    { "tag": "p", "text": "第二段正文继续说明合成测试场景，不包含任何真实用户数据。" }
+  ],
+  "images": [],
+  "pageText": "合成公众号文章 示例公众号 第一段正文，包含足够长度用于验证真实文章内容。"
+}

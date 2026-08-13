@@ -1,0 +1,9 @@
+{
+  "url": "https://mp.weixin.qq.com/s/example-check",
+  "title": "环境异常",
+  "account": "",
+  "bodyText": "",
+  "blocks": [],
+  "images": [],
+  "pageText": "当前环境异常，完成验证后即可继续访问。拖动滑块完成拼图。"
+}

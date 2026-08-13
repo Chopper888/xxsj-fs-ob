@@ -22,6 +22,11 @@ export interface NormalizedMedia {
   kind: "audio" | "video" | "image";
   role: "primary" | "context";
   sourceUrl?: string;
+  order?: number;
+  alt?: string;
+  caption?: string;
+  context?: string;
+  mimeType?: string;
 }
 
 export interface NormalizedLink { url: string; role: "source" | "context" | "external"; title?: string }
