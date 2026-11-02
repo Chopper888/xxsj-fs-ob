@@ -67,3 +67,4 @@ describe("WechatOfficialAccountAdapter", () => {
     expect(identity.dedupeKey).toMatch(/^wechat:[a-f0-9]{64}$/);
   });
 });
+

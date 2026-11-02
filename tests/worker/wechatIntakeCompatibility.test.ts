@@ -15,8 +15,8 @@ afterEach(async () => { await Promise.all(taskDirs.splice(0).map((path) => rm(pa
 describe("production WeChat intake compatibility", () => {
   it("takes the real intake shape from queue selection through fake Base done without ASR", async () => {
     const record = await loadFixture("production-intake-record");
-    expect(selectRunnableRecordIds([record], 1)).toEqual([record.record_id]);
-    expect(prepareAttemptFields(record.fields)).toMatchObject({ "处理状态": "processing" });
+    expect(await selectRunnableRecordIds("", [record], 1)).toEqual([record.record_id]);
+    expect(prepareAttemptFields()).toMatchObject({ "处理状态": "processing" });
 
     const snapshot = await loadFixture("normal-article");
     const registry = createProductionAdapterRegistry({ projectRoot: process.cwd(), wechatCapture: vi.fn(async () => snapshot) });
@@ -46,3 +46,4 @@ describe("production WeChat intake compatibility", () => {
     expect(record.fields["去重ID"]).toBe("weixin:example-article-id");
   });
 });
+

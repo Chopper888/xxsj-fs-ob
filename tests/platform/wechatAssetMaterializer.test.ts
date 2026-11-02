@@ -42,4 +42,27 @@ describe("WeChat image materialization", () => {
     const persisted = await persistWechatAssetsToVault(downloaded, { vaultPath: join(dir, "vault"), targetDir: "公众号", dedupeKey: "wechat:abc" });
     expect(persisted.assets[0].markdownPath).toMatch(/^_assets\/[a-f0-9]{16}\//); expect(await readFile(persisted.assets[0].localPath)).toEqual(Buffer.from([1]));
   });
+  it("默认不校验 magicBytes，微信行为不变", async () => {
+    const fetchImpl = vi.fn(async () => new Response(new Uint8Array([1, 2, 3]), { headers: { "content-type": "image/jpeg" } }));
+    const result = await materializeWechatImages([{ kind: "image", role: "context", sourceUrl: "https://mmbiz.qpic.cn/z", order: 1 }], { taskDir: dir, articleUrl: "https://mp.weixin.qq.com/s/a", fetchImpl });
+    expect(result.assets).toHaveLength(1);
+  });
+  it("magicBytes 开启时拒绝伪装成图片的错误页", async () => {
+    const fetchImpl = vi.fn(async () => new Response("<html>风控页</html>", { headers: { "content-type": "image/png" } }));
+    const result = await materializeWechatImages([{ kind: "image", role: "context", sourceUrl: "https://pbs.twimg.com/media/fake.png", order: 1 }], { taskDir: dir, articleUrl: "https://x.com/a/status/1", retries: 0, magicBytes: true, fetchImpl });
+    expect(result.assets).toEqual([]); expect(result.warnings[0]).toContain("image_magic_invalid");
+  });
+  it("magicBytes 开启时接受文件头合法的图片", async () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+    const fetchImpl = vi.fn(async () => new Response(png, { headers: { "content-type": "image/png" } }));
+    const result = await materializeWechatImages([{ kind: "image", role: "context", sourceUrl: "https://pbs.twimg.com/media/ok.png", order: 1 }], { taskDir: dir, articleUrl: "https://x.com/a/status/1", magicBytes: true, fetchImpl });
+    expect(result.assets).toHaveLength(1); expect(result.assets[0].localPath).toMatch(/\.png$/);
+  });
+  it("magicBytes 开启时接受 SVG 文本文件头", async () => {
+    const svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+    const fetchImpl = vi.fn(async () => new Response(svg, { headers: { "content-type": "image/svg+xml" } }));
+    const result = await materializeWechatImages([{ kind: "image", role: "context", sourceUrl: "https://example.com/i.svg", order: 1 }], { taskDir: dir, articleUrl: "https://x.com/a/status/1", magicBytes: true, fetchImpl });
+    expect(result.assets).toHaveLength(1); expect(result.assets[0].localPath).toMatch(/\.svg$/);
+  });
 });
+

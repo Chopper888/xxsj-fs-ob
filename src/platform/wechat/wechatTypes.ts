@@ -9,3 +9,4 @@ export interface ParsedWechatArticle {
   title: string; account: string; publishedAt?: string; body: string;
   images: Array<{ sourceUrl: string; order: number; alt?: string; context?: string; mimeType?: string }>;
 }
+

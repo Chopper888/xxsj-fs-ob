@@ -27,6 +27,20 @@ describe("DouyinAdapter compatibility", () => {
     expect((await adapter.resolveIdentity(normalized, context)).dedupeKey).toBe(dedupeKey);
   });
 
+  it("recognizes note and article URLs in addition to video", () => {
+    const adapter = new DouyinAdapter();
+    expect(adapter.canHandle({ sourceUrl: "https://www.douyin.com/note/7650000000000000000" })).toBe(true);
+    expect(adapter.canHandle({ sourceUrl: "https://www.douyin.com/article/7650000000000000000" })).toBe(true);
+    expect(adapter.canHandle({ sourceUrl: "https://www.douyin.com/video/7650000000000000000" })).toBe(true);
+  });
+
+  it("normalizes note URL to a note canonical URL with the aweme id", async () => {
+    const adapter = new DouyinAdapter();
+    const normalized = await adapter.normalizeUrl({ sourceUrl: "https://www.douyin.com/note/7650000000000000000" }, context);
+    const identity = await adapter.resolveIdentity(normalized, context);
+    expect(identity).toMatchObject({ platform: "douyin", platformContentId: "7650000000000000000", canonicalUrl: "https://www.douyin.com/note/7650000000000000000", dedupeKey: "douyin:7650000000000000000" });
+  });
+
   it("uses the verified existing missing-dedupe rule douyin:<work-id>", async () => {
     const adapter = new DouyinAdapter();
     const normalized = await adapter.normalizeUrl({ sourceUrl: "https://www.douyin.com/video/7650000000000000000" }, context);

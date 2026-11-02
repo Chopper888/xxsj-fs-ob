@@ -39,3 +39,4 @@ describe("wechat article parser", () => {
     expect(parseWechatArticle(input).images).toHaveLength(1);
   });
 });
+

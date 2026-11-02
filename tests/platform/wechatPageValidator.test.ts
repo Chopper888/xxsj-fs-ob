@@ -26,3 +26,4 @@ describe("wechat page validator", () => {
     throw new Error("expected typed validation error");
   });
 });
+

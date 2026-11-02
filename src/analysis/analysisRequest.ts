@@ -10,3 +10,4 @@ export function buildDouyinAnalysisRequest(input: AnalysisInput, options: { sour
     required_provenance: { source_record_id: input.sourceRecordId, source_platform: options.sourcePlatform, processor: "local-ai-analysis", model: options.model, processor_version: "1.0.0" },
   };
 }
+

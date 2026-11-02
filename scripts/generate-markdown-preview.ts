@@ -1,4 +1,4 @@
-﻿import "dotenv/config";
+import "dotenv/config";
 import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { resolveDouyinMediaWithBrowser } from "../src/media/douyinMediaCapture.js";
@@ -20,7 +20,7 @@ function required(name: string): string {
 }
 
 async function baseApi(path: string): Promise<any> {
-  const token = (await readFile(process.env.FEISHU_TOKEN_FILE ?? process.env.FEISHU_TOKEN_FILE ?? path.join(process.env.XXSJ_FS_OB_PROJECT_ROOT ?? ".", "feishu_token.txt"), "utf8")).trim();
+  const token = (await readFile(process.env.FEISHU_TOKEN_FILE ?? ".feishu_token.txt", "utf8")).trim();
   const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${required("FEISHU_BASE_TOKEN")}/tables/${required("FEISHU_TABLE_ID")}${path}`;
   const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   const payload = await response.json() as any;
@@ -124,8 +124,8 @@ async function main() {
     downloadUrlStatus,
     localMediaPath: mediaPath,
     workId,
-    publishedAt: taipeiIso(beforeFields["日期"]),
-    collectedAt: taipeiIso(beforeFields["收藏时间"]),
+    publishedAt: taipeiIso(beforeFields["作品发布日期"]),
+    collectedAt: taipeiIso(beforeFields["收录日期"]),
     primaryCategory: String(analysis.primary_category ?? beforeFields["一级标签"] ?? ""),
     secondaryCategory: String(analysis.secondary_category ?? beforeFields["二级标签"] ?? ""),
     baseRecordId: recordId,
@@ -148,7 +148,7 @@ async function main() {
       transcript_paragraphs: transcript.split(/\n\s*\n/).filter(Boolean).length,
       original_url_matches_base: mediaLinks.original_url === originalUrl,
       direct_url_status: downloadUrlStatus,
-      published_and_collected_separate: beforeFields["日期"] !== beforeFields["收藏时间"],
+      published_and_collected_separate: beforeFields["作品发布日期"] !== beforeFields["收录日期"],
       corrections_applied: false,
       base_status_before: beforeFields["处理状态"],
       obsidian_written: false,

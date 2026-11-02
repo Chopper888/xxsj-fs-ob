@@ -31,3 +31,4 @@ export class WechatOfficialAccountAdapter implements PlatformAdapter {
       texts: [{ kind: "body", role: "primary", text: parsed.body, language: "zh-CN" }], media: parsed.images.map(x => ({ kind: "image", role: "context", ...x })), links: [{ url: finalIdentity.canonicalUrl, role: "source" }], sourceMetadata: { accountName: parsed.account, imageCount: parsed.images.length, rawBodyImageCount: page.images.length, imageDiagnostics: page.imageDiagnostics ?? null, browserStrategy: "browser-first" } };
   }
 }
+

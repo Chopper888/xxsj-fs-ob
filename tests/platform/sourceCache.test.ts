@@ -21,3 +21,4 @@ describe("normalized source cache", () => {
   });
   it("does not persist a raw source URL carrying transient query credentials", async () => { const unsafe = { ...content, identity: { ...content.identity, sourceUrl: `${content.identity.canonicalUrl}?pass_ticket=secret` } }; await saveNormalizedContentCache(dir, unsafe); expect((await loadNormalizedContentCache(dir, content.identity))?.identity.sourceUrl).toBe(content.identity.canonicalUrl); });
 });
+

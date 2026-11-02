@@ -45,11 +45,14 @@ export interface TaskClaim {
   platform: string;
 }
 
-// === Base field whitelist (from actual Feishu Base schema) ===
+// === Base field whitelist (from actual Feishu Base schema, verified 2026-08-20) ===
+// 表内真实字段：去重ID 处理状态 三级标签 作者 标题 来源平台 作品发布日期
+//             二级标签 知识库路径 概述 一级标签 收录日期 处理时间 备注 最近错误 原文链接
+// 旧字段「日期」→「作品发布日期」、「收藏时间」→「收录日期」；「重试次数」不再落表，改存本地 stage.json。
 export const BASE_FIELD_NAMES = [
-  "标题", "原文链接", "来源平台", "作者", "日期", "一级标签", "概述",
-  "二级标签", "去重ID", "处理状态", "备注", "重试次数", "最近错误",
-  "处理时间", "知识库路径", "收藏时间",
+  "标题", "原文链接", "来源平台", "作者", "作品发布日期", "一级标签", "概述",
+  "二级标签", "去重ID", "处理状态", "备注", "最近错误",
+  "处理时间", "知识库路径", "收录日期", "三级标签",
 ] as const;
 
 export function validateBaseFields(fields: Record<string, unknown>): void {
@@ -134,15 +137,48 @@ export async function migrateLegacyStage(dataRoot: string, recordId: string): Pr
 export async function saveStage(dataRoot: string, recordId: string, stage: ProcessStage, detail?: string): Promise<void> {
   const dir = join(dataRoot, "data", "tasks", recordId);
   await mkdir(dir, { recursive: true });
-  await writeFile(resolveStagePath(dataRoot, recordId), JSON.stringify({ stage, detail, updatedAt: new Date().toISOString() }, null, 2), "utf8");
+  const existing = await readStage(dataRoot, recordId).catch(() => null);
+  const payload: Record<string, unknown> = { stage, detail, updatedAt: new Date().toISOString() };
+  if (existing?.retryCount !== undefined) payload.retryCount = existing.retryCount;
+  await writeFile(resolveStagePath(dataRoot, recordId), JSON.stringify(payload, null, 2), "utf8");
 }
 
-export async function readStage(dataRoot: string, recordId: string): Promise<{ stage: ProcessStage; detail?: string } | null> {
+export async function readStage(dataRoot: string, recordId: string): Promise<{ stage: ProcessStage; detail?: string; retryCount?: number } | null> {
   try {
     // Check legacy first, migrate if found
     await migrateLegacyStage(dataRoot, recordId);
     return JSON.parse(await readFile(resolveStagePath(dataRoot, recordId), "utf8"));
   } catch { return null; }
+}
+
+// === 本地重试计数（不写回飞书表格；表里没有「重试次数」字段） ===
+export async function readTaskRetryCount(dataRoot: string, recordId: string): Promise<number> {
+  const stage = await readStage(dataRoot, recordId);
+  return typeof stage?.retryCount === "number" ? stage.retryCount : 0;
+}
+
+export async function writeTaskRetryCount(dataRoot: string, recordId: string, retryCount: number): Promise<void> {
+  const dir = join(dataRoot, "data", "tasks", recordId);
+  await mkdir(dir, { recursive: true });
+  const existing = await readStage(dataRoot, recordId).catch(() => null);
+  const payload: Record<string, unknown> = {
+    stage: existing?.stage ?? "pending",
+    detail: existing?.detail,
+    updatedAt: new Date().toISOString(),
+    retryCount,
+  };
+  await writeFile(resolveStagePath(dataRoot, recordId), JSON.stringify(payload, null, 2), "utf8");
+}
+
+// priorStatus 为 failed 时才递增（与旧版「仅失败重试时 +1」语义一致）；否则原样返回。
+export async function bumpTaskRetryCount(dataRoot: string, recordId: string, priorStatus: string): Promise<number> {
+  const current = await readTaskRetryCount(dataRoot, recordId);
+  if (priorStatus === "failed") {
+    const next = current + 1;
+    await writeTaskRetryCount(dataRoot, recordId, next);
+    return next;
+  }
+  return current;
 }
 
 // --- Product existence checks ---

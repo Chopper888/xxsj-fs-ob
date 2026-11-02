@@ -1,4 +1,4 @@
-﻿import "dotenv/config";
+import "dotenv/config";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { buildAnalysisSystemPrompt, parseAndValidateAnalysis } from "../src/analysis/contentAnalysis.js";
@@ -29,7 +29,7 @@ function required(name: string): string {
 }
 
 async function baseApi(path: string): Promise<any> {
-  const tokenFile = process.env.FEISHU_TOKEN_FILE ?? process.env.FEISHU_TOKEN_FILE ?? path.join(process.env.XXSJ_FS_OB_PROJECT_ROOT ?? ".", "feishu_token.txt");
+  const tokenFile = process.env.FEISHU_TOKEN_FILE ?? ".feishu_token.txt";
   const token = (await readFile(tokenFile, "utf8")).trim();
   const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${required("FEISHU_BASE_TOKEN")}/tables/${required("FEISHU_TABLE_ID")}${path}`;
   const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
@@ -67,8 +67,8 @@ async function main() {
     source_platform: fields["来源平台"] ?? "",
     source_url: fields["原文链接"] ?? "",
     work_id: workId,
-    publish_date: isoDate(fields["日期"]),
-    collection_time: isoDate(fields["收藏时间"]),
+    publish_date: isoDate(fields["作品发布日期"]),
+    collection_time: isoDate(fields["收录日期"]),
     existing_primary_category: fields["一级标签"] ?? "",
     existing_secondary_category: fields["二级标签"] ?? "",
     primary_category_options: primaryCategories,

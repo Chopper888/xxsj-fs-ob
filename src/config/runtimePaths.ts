@@ -6,3 +6,4 @@ export function resolveRuntimePaths(input: RuntimePathsInput = {}, env: Record<s
   if (!obsidianVaultPath) throw new Error("obsidian_vault_path_required");
   return { obsidianVaultPath };
 }
+

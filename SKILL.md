@@ -1,171 +1,115 @@
 ---
 name: xxsj-fs-ob
-description: "通过飞书多维表格任务队列启动和维护本地信息收集 Worker，将抖音视频转写、分析并归档到 Obsidian。"
+description: "通过飞书多维表格任务队列运行本地信息收集 Worker：从抖音、B站、微信公众号、X、YouTube 采集内容，转写并做 AI 分析，归档到 Obsidian。"
 ---
 
 # xxsj-fs-ob
 
+适用于 Claude Code 与 Codex。用于安装、检查、启动、停止和排错；正式处理由本地 Worker 完成。
+
 ## 适用场景
 
-使用此 Skill 处理以下请求：
-
 - 安装或检查 xxsj-fs-ob；
-- 启动、停止或检查信息收集 Worker；
-- 处理飞书多维表格中的抖音任务；
-- 指定飞书 Base Record ID 进行单次处理；
-- 查看 pending、failed 或恢复状态；
-- 执行 doctor、包装校验或缓存清理预演；
-- 排查飞书、ASR、DeepSeek 或 Obsidian 写入问题。
+- 启动、停止、查看 Worker 状态；
+- 单次处理队列或指定飞书 Record ID；
+- 查看失败任务并决定是否重试；
+- 排查飞书、ASR、模型分析或 Obsidian 写入问题；
+- 清理缓存预演。
 
 ## 项目定位
 
-这是一个本地信息收集系统的 Codex 操作层。
+- 项目根目录：包含 `package.json`、`src/`、`scripts/` 的完整源码目录。
+- Skill 目录可以只是包装层；Worker 必须从项目根启动。
+- 运行根优先级：`-ProjectRoot` → `XXSJ_FS_OB_PROJECT_ROOT` → 启动器所在目录（须是完整项目根）。
+- Worker 启动后不依赖 Agent 会话保持在线。
 
-Codex 用于安装、检查、启动、停止和排错。正式业务处理由本地 Worker 完成。Worker 启动后，不要求 Codex 会话持续在线。
+## 平台与写法
 
-Base 指飞书多维表格。
+`来源平台` 统一写下列标准值：
 
-## 当前正式支持
+| 标准写法 | 能力 |
+|---|---|
+| 抖音 | 视频、图文 `/note/`；文章 `/article/` 未验证；不支持 v.douyin.com 短链 |
+| B站 | BV/av、b23.tv 短链、视频转写 |
+| 微信公众号 | `/s/` 文章、图片归档 |
+| X | status 链接、t.co 短链、纯数字 ID；图片、视频 |
+| YouTube | `watch?v=`、`youtu.be`；官方字幕优先，无字幕转音频 ASR |
 
-- 抖音视频采集和处理；
-- 飞书多维表格任务队列；
-- Qwen-ASR 主转写；
-- Faster-Whisper Large-v3 fallback；
-- DeepSeek 摘要、分类和值得保存的信息；
-- Obsidian Markdown 原子写入；
-- 去重、幂等、断点恢复、锁和冲突保护；
-- bot identity 无人值守 Base 读写。
+小红书、其他：未实现，Worker 不会领取。来源平台留空按「抖音」处理。
 
-## 尚未支持
-
-以下平台仅有目录或架构预留，不能宣称已实现：
-
-- 公众号；
-- B站；
-- YouTube；
-- 推特 / X；
-- 小红书。
-
-遇到未支持平台时，不得伪造结果，不得将任务标记为 done。
-
-## 固定处理流程
+## 处理流程
 
 ```text
-飞书机器人收到抖音链接
-→ 飞书多维表格创建 pending 记录
-→ Worker 领取并锁定任务
-→ 解析和下载抖音视频
-→ Qwen-ASR 转写
-→ 失败时使用 Faster-Whisper Large-v3
-→ DeepSeek 生成摘要、分类和值得保存的信息
+飞书机器人收到链接
+→ 多维表格新建 pending 记录
+→ Worker 领取并锁定
+→ 解析、下载（图片/音视频）
+→ 官方字幕优先，否则 Qwen-ASR；失败回退 faster-whisper large-v3
+→ 模型生成摘要、要点、分类
 → 生成 Markdown
 → 原子写入 Obsidian
-→ 回写 Base
-→ done
+→ 回写 处理状态=done 与 知识库路径
 ```
-
-## 启动原则
-
-普通用户只保留两种启动方式。
-
-### Codex 启动
-
-检查环境和 Worker 状态后，调用现有启动脚本。不得创建第二套 Worker。
-
-### CMD 或快捷方式启动
-
-用户双击：
-
-`start-xxsj-fs-ob-worker.cmd`
-
-调用链：
-
-```text
-start-xxsj-fs-ob-worker.cmd
-→ start-xxsj-fs-ob-worker.ps1
-→ scripts\start-worker.ps1
-```
-
-Skill 根目录是操作包装层；实际 Worker 必须从完整项目运行根启动。正式运行根优先读取
-`XXSJ_FS_OB_PROJECT_ROOT`，也可由启动入口显式传入 `-ProjectRoot`。
-
-`.ps1` 是底层脚本，不作为第三种普通用户启动方式宣传。
 
 ## 常用命令
 
 ```powershell
-# 包装校验
-.\scripts\validate-skill.ps1
-
 # 环境检查
 .\scripts\doctor.ps1
 
-# 单次处理
+# 单轮处理（默认最多 4 条，处理完退出）
 .\scripts\run-once.ps1
 
-# 指定飞书 Base Record ID
+# 指定飞书 Record ID（不是平台作品 ID）
 .\scripts\run-once.ps1 -RecordIds "recxxxxxxxx"
 
-# 启动 Worker
+# 后台长期 Worker / 单次指定记录
 .\scripts\start-worker.ps1
+.\scripts\start-worker.ps1 -RecordIds "recxxxxxxxx"
 
-# 查看一次状态快照
+# 状态、监控、停止
 .\scripts\status-worker.ps1
-
-# 打开实时监控（关闭窗口不会停止 Worker）
 .\scripts\monitor-worker.ps1
-
-# 停止 Worker
 .\scripts\stop-worker.ps1
 
-# 缓存清理预演
+# 缓存清理预演（默认只读；-Execute 才删除）
 .\scripts\cleanup-dry-run.ps1
 ```
 
-不传 `RecordIds` 的 `start-worker.ps1` 是长期轮询 Worker；`run-once.ps1` 是单轮领取并退出；
-为 `run-once.ps1` 传入 `RecordIds` 时只处理指定记录。停止脚本按 lock 中的 PID 精确停止本项目 Worker。
+普通用户也可双击 `start-xxsj-fs-ob-worker.cmd`。重复双击会复用已运行的 Worker。
 
-具体参数以脚本帮助和当前 README 为准。
+## 查失败任务（必须先向用户确认）
 
-## 安装目录
+1. 读取多维表格中 `处理状态=failed` 的记录，汇报 `最近错误`。
+2. 说明是否可自动重试：最多 3 次，退避 60/300/900 秒，计数在本地 `stage.json`。
+3. **等待用户确认**要重试哪些。
+4. 把确认的记录改为 `处理状态=pending`、清空 `最近错误`。
+5. 运行 `run-once.ps1` 或等待 Worker 下一轮。
 
-不要假定所有 Codex 客户端都使用同一路径。
+不要擅自重置失败记录。
 
-安装时：
+## 配置
 
-1. 查找当前客户端已能正常显示的 Skill；
-2. 使用其真实目录作为参照；
-3. 只安装一份 xxsj-fs-ob；
-4. 完全重启 Codex；
-5. 在 Skill 选择器中确认实际出现。
+- 复制 `.env.example` 为 `.env`，填入自己的值。
+- 必填：`FEISHU_BASE_TOKEN`、`FEISHU_TABLE_ID`、`LARK_PROFILE`、`OBSIDIAN_VAULT_PATH`、`LLM_API_KEY`（`SUMMARY_MODE=openai` 时）。
+- 可选：`DASHSCOPE_API_KEY`（不填走本地 Whisper）。
+- 代理：`XXSJ_HTTPS_PROXY` / `XXSJ_HTTP_PROXY`，留空表示不使用；X、YouTube 通常需要。
+- 完整说明见 `README.md` 与 `.env.example` 注释。
 
-当前本机实测安装目录为：
+## 安装位置
 
-`%USERPROFILE%\.codex\skills\xxsj-fs-ob`
+Skill 目录因客户端而异，不要写死：
 
-公开说明中不得把该用户名路径写成其他用户必须照搬的路径。
+- Codex：通常为 `%USERPROFILE%\.codex\skills\xxsj-fs-ob`
+- Claude Code：通常为 `%USERPROFILE%\.claude\skills\xxsj-fs-ob`
+
+只保留一份；安装后重启客户端并在 Skill 选择器中确认出现。
 
 ## 安全边界
 
-- 不输出或提交 API Key、App Secret、Token、Cookie 或完整 `.env`；
-- 不打印或持久化完整签名媒体 URL；
-- 不覆盖用户已经修改的 Obsidian 笔记；
-- 不处理未授权记录；
-- 不将失败任务错误标记为 done；
-- 不无限重试；
-- 不同时启动多个 Worker；
-- 不把未支持平台伪装成已支持；
-- 不修改"乔巴1号"的独立飞书应用配置。
-
-## 数据存档
-
-每条已处理内容长期保留：
-
-1. 内部原始 ASR 结果；
-2. Obsidian 最终 Markdown。
-
-不恢复人工校订、人工审批或多层逐字稿存档流程。
-
-## 版本
-
-`v1.0.1`
+- 不输出或提交 API Key、App Secret、Token、Cookie、Base 标识、本机绝对路径。
+- 不打印签名媒体 URL。
+- 不覆盖用户修改过的 Obsidian 笔记。
+- 不把失败任务标为 done。
+- 不同时启动多个 Worker。
+- 不把未支持平台伪装成已支持。

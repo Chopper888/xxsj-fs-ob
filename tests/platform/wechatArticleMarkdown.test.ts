@@ -7,3 +7,4 @@ describe("WeChat article Markdown", () => {
     expect(markdown).toContain("## AI 摘要"); expect(markdown).toContain("## 原文正文"); expect(markdown).toContain("原文章正文内容"); expect(markdown).not.toContain("逐字稿");
   });
 });
+

@@ -28,7 +28,7 @@ Write-Host "[OK] 目录结构"
 
 # 7. Config template
 if (-not (Test-Path ".env")) {
-    Copy-Item "config\.env.example" ".env"
+    Copy-Item ".env.example" ".env"
     Write-Host "[OK] .env 模板已创建，请编辑填入配置"
 } else {
     Write-Host "[OK] .env 已存在，跳过"

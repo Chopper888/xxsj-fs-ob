@@ -1,4 +1,4 @@
-﻿import "dotenv/config";
+import "dotenv/config";
 import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -11,7 +11,7 @@ import { buildOrchestratorConfigFromEnv } from "../src/asr/providers.js";
 type Fields = Record<string, unknown>;
 
 const root = resolve(import.meta.dirname, "..");
-const tokenFile = process.env.FEISHU_TOKEN_FILE ?? process.env.FEISHU_TOKEN_FILE ?? path.join(process.env.XXSJ_FS_OB_PROJECT_ROOT ?? ".", "feishu_token.txt");
+const tokenFile = process.env.FEISHU_TOKEN_FILE ?? ".feishu_token.txt";
 const baseToken = requiredEnv("FEISHU_BASE_TOKEN");
 const tableId = requiredEnv("FEISHU_TABLE_ID");
 const apiRoot = `https://open.feishu.cn/open-apis/bitable/v1/apps/${baseToken}/tables/${tableId}`;
@@ -182,9 +182,8 @@ async function main() {
   } catch (error) {
     const current = await getRecord(args.recordId).catch(() => original);
     snapshotPaths.push(await writeBaseAttemptSnapshot({ taskDir, recordId: args.recordId, attempt, fields: current }).catch(() => "snapshot_failed"));
-    const retryCount = Number(current["重试次数"] ?? original["重试次数"] ?? 0);
     const summary = structuredError(stage, error);
-    await updateAndConfirm(args.recordId, { "处理状态": "failed", "重试次数": retryCount + 1, "最近错误": summary }).catch(() => undefined);
+    await updateAndConfirm(args.recordId, { "处理状态": "failed", "最近错误": summary }).catch(() => undefined);
     note(`failed:${summary}`);
     await writeFile(logPath, `${log.join("\n")}\n`, "utf8").catch(() => undefined);
     throw error;

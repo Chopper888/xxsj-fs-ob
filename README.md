@@ -1,169 +1,197 @@
 # xxsj-fs-ob
 
-把平台内容自动变成自己的 Obsidian 知识资产。
+把你在各平台看到的链接，自动变成 Obsidian 里的结构化知识笔记。
 
-飞书 → Base → Local Worker → ASR → DeepSeek → Obsidian
+**飞书机器人收链接 → 飞书多维表格排队 → 本地 Worker 下载/转写/AI 分析 → Obsidian 归档**
 
-Turn shared content into structured knowledge.
+仅支持 **Windows 10/11**。所有处理都在你自己的电脑上完成，API Key 和笔记不会上传到本项目。
 
-[![Release](https://img.shields.io/github/v/release/Chopper888/xxsj-fs-ob)](https://github.com/Chopper888/xxsj-fs-ob/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![CI](https://github.com/Chopper888/xxsj-fs-ob/actions/workflows/ci.yml/badge.svg)](https://github.com/Chopper888/xxsj-fs-ob/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-251%2F251-brightgreen)](https://github.com/Chopper888/xxsj-fs-ob)
-[![Windows](https://img.shields.io/badge/Windows-supported-blue)](https://github.com/Chopper888/xxsj-fs-ob)
-[![Douyin](https://img.shields.io/badge/Douyin-supported-red)](https://github.com/Chopper888/xxsj-fs-ob)
+---
 
-## 它解决什么问题
+## 它做什么
 
-你把抖音链接发给自己的飞书机器人，后续的下载、转写、AI 分析、Obsidian 归档全部自动完成。不用手动复制、不用来回切换工具。
-
-## 最终效果
-
-**飞书多维表格**里可以看到每条任务的完整生命周期：
-
-```
-pending → processing → draft_ready → done
-```
-
-**Obsidian** 里自动生成结构化笔记：标题、作者、平台、原文链接、内容提要、完整逐字稿、AI 分类和「值得保存的信息」。
-
-## 工作流程
+1. 你把抖音、B站、微信公众号、X 或 YouTube 的链接发给自己的飞书机器人；
+2. 机器人把链接写入飞书多维表格，生成一条 `pending` 任务；
+3. 本地 Worker 自动领取任务，下载内容；
+4. 有官方字幕时直接使用；否则调用 Qwen-ASR 转写，失败回退本地 faster-whisper；
+5. 用 AI 生成摘要、关键信息、分类和值得保存的信息；
+6. 写入你的 Obsidian vault；
+7. 回写多维表格：`处理状态=done`、`知识库路径`。
 
 ```mermaid
 flowchart LR
-    A[抖音链接] --> B[飞书机器人]
-    B --> C[飞书多维表格 Base]
-    C --> D[Local Worker]
-    D --> E[解析与下载]
-    E --> F[Qwen-ASR]
-    F -->|失败 fallback| G[Faster-Whisper Large-v3]
-    F --> H[DeepSeek]
-    G --> H
-    H --> I[Markdown]
-    I --> J[Obsidian]
-    J --> K[Base 回写 done]
+    A[飞书机器人收到链接] --> B[飞书多维表格<br/>pending]
+    B --> C[本地 Worker]
+    C --> D[解析与下载]
+    D --> E{有官方字幕?}
+    E -->|有| F[字幕文本]
+    E -->|无| G[Qwen-ASR]
+    G -->|失败| H[faster-whisper<br/>large-v3]
+    F --> I[AI 分析]
+    G --> I
+    H --> I
+    I --> J[Markdown]
+    J --> K[Obsidian]
+    K --> L[多维表格 done<br/>+ 知识库路径]
 ```
 
-## Quick Start
+---
 
-### 前置条件
-
-- Windows 电脑
-- Node.js、pnpm、Python 3.10+、FFmpeg
-- 自己的飞书应用（含机器人 + 多维表格）
-- Qwen（阿里云 DashScope）API Key
-- DeepSeek API Key
-- Obsidian
-
-### 安装
-
-```bash
-git clone https://github.com/Chopper888/xxsj-fs-ob.git
-cd xxsj-fs-ob
-pnpm install
-```
-
-### 配置
-
-```bash
-cp .env.example .env
-# 编辑 .env，填写飞书、Qwen、DeepSeek、Obsidian 等信息
-```
-
-详细部署说明见 [docs/安装部署与日常使用说明.md](docs/安装部署与日常使用说明.md)。
-
-### 环境检查
-
-```powershell
-.\scripts\doctor.ps1
-```
-
-### 启动 Worker
-
-双击项目根目录的：
-
-```
-start-xxsj-fs-ob-worker.cmd
-```
-
-Worker 会在后台启动并自动打开 Worker Monitor；关闭 Monitor 不会停止 Worker。再次双击时会复用正在运行的 Worker，只重新打开 Monitor。
-
-或让 Codex 帮你：
-
-> 请使用 xxsj-fs-ob 检查 Worker 状态。如果环境正常且 Worker 尚未运行，请启动 Worker。
-
-### 触发任务
-
-Worker 启动后，把你感兴趣的抖音链接发给自己的飞书机器人即可。剩下的事全部自动。
-
-### 停止 Worker
-
-```powershell
-.\scripts\stop-worker.ps1
-```
-
-## 作为 Codex Skill 使用
-
-本项目同时是一个 [Codex](https://openai.com/codex) Skill，可用于安装、检查、启动和维护。
-
-安装方式见 [docs/安装部署与日常使用说明.md](docs/安装部署与日常使用说明.md)。
-
-## 输入与输出示例
-
-见 [examples/](examples/) 目录。全部使用合成数据，不含真实用户信息。
-
-## Obsidian 最终笔记结构
-
-```text
-<标题> - <完整平台作品ID>.md
-```
-
-笔记包含：标题、作者、平台、发布时间、原始链接、内容提要、完整逐字稿、AI 分类、值得保存的信息。
-
-## 支持平台
+## 平台支持
 
 | 平台 | 状态 | 说明 |
 |---|---|---|
-| 抖音 | 正式支持 | v1.0.1 |
-| 公众号 | 下一优先级 | 规划中 |
-| B站 | Planned | 未实现 |
-| YouTube | Planned | 未实现 |
-| 推特 / X | Planned | 未实现 |
-| 小红书 | Planned | 未实现 |
+| 抖音 | 支持 | 视频、图文（`/note/`）；不支持 v.douyin.com 短链 |
+| B站 | 支持 | BV/av 链接、b23.tv 短链、视频转写 |
+| 微信公众号 | 支持 | `/s/` 文章与图片归档 |
+| X（推特） | 支持 | 推文、t.co 短链、纯数字 ID、图片、视频 |
+| YouTube | 部分支持 | 有官方字幕的视频稳定可用；无字幕视频受 CDN 限制，可能失败 |
+| 小红书 | 未支持 | 不会领取此类任务 |
 
-目录中存在不等于功能已实现。遇到未支持平台时，Worker 会明确拒绝而非伪装成成功。
+多维表格的 `来源平台` 请统一写：`抖音`、`B站`、`微信公众号`、`X`、`YouTube`。
 
-## 质量与测试
+---
 
-```bash
-pnpm typecheck    # TypeScript 类型检查
-pnpm test         # 27 个测试文件，251 项测试
+## 前置条件
+
+- Windows 10/11
+- Node.js 20+ 与 npm/pnpm
+- Python 3.10+（本地转写需要）
+- FFmpeg 与 ffprobe
+- lark-cli（飞书命令行工具）
+- 自己的飞书自建应用 + 机器人 + 多维表格
+- 一个 OpenAI 兼容的分析模型 API Key（如 DeepSeek）
+- Obsidian vault
+
+可选：阿里云 DashScope Key（Qwen-ASR，云端转写）；NVIDIA GPU（本地转写更快）。
+
+---
+
+## 最快安装：让 AI 助手帮你装
+
+把下面这段发给 Codex 或 Claude Code，并把 GitHub 地址替换成当前仓库地址：
+
+```text
+请帮我安装这个 skill：
+https://github.com/Chopper888/xxsj-fs-ob
+
+要求：
+1. 先阅读 README.md、SKILL.md 和 docs/安装部署与日常使用说明.md；
+2. 把仓库克隆到本机一个固定位置，并安装依赖；
+3. 根据我的客户端找到正确的 skill 目录（Codex 或 Claude Code），只安装一份；
+4. 复制 .env.example 为 .env，但不要让我在聊天里发送任何密钥；
+5. 运行 scripts/install.ps1 和 scripts/doctor.ps1；
+6. 告诉我还需要我自己完成的飞书应用、机器人、Base 和 API Key 步骤；
+7. 环境检查通过后暂停，不要擅自启动长期 Worker。
 ```
+
+如果安装到项目目录本身，也可以直接在该目录使用，不需要复制到 skill 目录。
+
+---
+
+## 手动安装
 
 ```powershell
-.\scripts\validate-skill.ps1   # 项目校验
+git clone https://github.com/Chopper888/xxsj-fs-ob.git
+cd xxsj-fs-ob
+pnpm install
+Copy-Item .env.example .env
+notepad .env
 ```
+
+然后运行：
+
+```powershell
+.\scripts\install.ps1
+.\scripts\doctor.ps1
+```
+
+`install.ps1` 会安装依赖、创建 `data` 目录、在缺少 `.env` 时从模板复制，并运行环境检查。
+
+---
+
+## 配置
+
+所有配置都在项目根目录的 `.env`。模板里的每一项都有中文注释，主要必填项：
+
+| 配置项 | 用途 |
+|---|---|
+| `FEISHU_BASE_TOKEN` | 飞书多维表格 Base token |
+| `FEISHU_TABLE_ID` | 数据表 table id |
+| `LARK_PROFILE` | lark-cli profile 名称 |
+| `OBSIDIAN_VAULT_PATH` | Obsidian vault 绝对路径（必填，未填 Worker 不启动） |
+| `LLM_API_KEY` | 分析模型 API Key |
+| `LLM_BASE_URL` / `LLM_MODEL` | 分析模型地址与名称 |
+| `DASHSCOPE_API_KEY` | 可选，Qwen-ASR；不填走本地转写 |
+| `XXSJ_HTTPS_PROXY` | 可选，代理；留空表示不使用 |
+
+- 抖音、微信公众号、B站、飞书一般不需要代理；X、YouTube 通常需要。
+- 首次处理抖音前，运行 `python scripts/manual-login.ts`（或 `npx tsx scripts/manual-login.ts`）扫码登录，登录态保存在 `.browser/douyin`。
+- 完整字段说明见 `.env.example`。
+
+飞书应用与多维表格的字段要求、权限配置见 `docs/飞书权限配置.md`。
+
+---
+
+## 日常使用
+
+启动（双击或命令行）：
+
+```text
+start-xxsj-fs-ob-worker.cmd
+```
+
+Worker 在后台运行；再次双击会复用正在运行的 Worker。关闭监控窗口不会停止 Worker。
+
+```powershell
+# 单轮处理，处理完退出
+.\scripts\run-once.ps1
+
+# 只处理指定飞书 Record ID
+.\scripts\run-once.ps1 -RecordIds "recxxxxxxxx"
+
+# 查看状态 / 停止
+.\scripts\status-worker.ps1
+.\scripts\stop-worker.ps1
+```
+
+详细说明见 [docs/安装部署与日常使用说明.md](docs/安装部署与日常使用说明.md)。
+
+---
+
+## 输出
+
+笔记写入：
+
+```text
+<OBSIDIAN_VAULT_PATH>\<OBSIDIAN_INBOX_DIR>\<平台>\<标题> - <作品ID后 8 位>.md
+```
+
+图片归档到同平台目录下的 `_assets\<哈希>\`。
+
+笔记包含：标题、作者、发布时间、原文链接、AI 摘要、关键信息、原文/字幕/逐字稿、值得保存的信息。已有笔记内容被用户修改过时不会覆盖。
+
+---
+
+## 安全
+
+- `.env`、`.browser/`、`cookies/`、`data/`、`logs/` 已在 `.gitignore` 中，不要提交。
+- 不要在任何 Issue、截图、日志或聊天中公开 API Key、App Secret、Token、Base 标识或 cookie。
+- 本项目不包含任何真实密钥、真实笔记或真实逐字稿。
+- 请遵守各平台的服务条款与内容版权要求。
+
+---
 
 ## 文档
 
-完整文档索引见 [docs/README.md](docs/README.md)。
-
-## Roadmap
-
-见 [ROADMAP.md](ROADMAP.md)。
-
-## Security
-
-见 [SECURITY.md](SECURITY.md)。
-
-公共仓库不得包含：`.env`、App Secret、API Key、Token、Cookie、个人飞书 App ID、Base 标识、Obsidian 绝对路径、真实视频、真实逐字稿和笔记。
-
-## Contributing
-
-见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+- [安装部署与日常使用说明](docs/安装部署与日常使用说明.md)
+- [运行与停止](docs/运行与停止.md)
+- [故障恢复](docs/故障恢复.md)
+- [Obsidian 目录说明](docs/Obsidian目录说明.md)
+- [飞书权限配置](docs/飞书权限配置.md)
+- [日志与缓存](docs/日志与缓存.md)
+- [升级与回滚](docs/升级与回滚.md)
 
 ## License
 
-MIT License。原作者：乔巴。
-
-见 [LICENSE](LICENSE)。
+作者：乔巴。使用前请先确认仓库内是否包含 LICENSE 文件。

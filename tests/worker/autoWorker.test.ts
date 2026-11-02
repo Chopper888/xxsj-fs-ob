@@ -6,6 +6,7 @@ import { randomUUID, createHash } from "node:crypto";
 import {
   resolveMediaUrlForAsr, resolveStagePath, resolveLegacyStagePath,
   migrateLegacyStage, saveStage, readStage,
+  readTaskRetryCount, writeTaskRetryCount, bumpTaskRetryCount,
   tryAcquireLock, releaseLock, readLock, tryCleanStaleLock,
   validateBaseFields, validateRecordId, determineResumeStage,
   sha256, sanitizeLogUrl, BASE_FIELD_NAMES,
@@ -116,6 +117,44 @@ describe("stage file management", () => {
     const migrated = await migrateLegacyStage(tmpDir, rid);
     expect(migrated).toBe(true);
     await expect(access(legacyPath)).rejects.toThrow();
+  });
+});
+
+// ====== 2.5 本地重试计数（S0-R6：不再写回飞书表格） ======
+describe("local retry count in stage.json", () => {
+  const rid = "recvrgretry001";
+
+  it("defaults to 0 when no stage exists", async () => {
+    expect(await readTaskRetryCount(tmpDir, "noexist")).toBe(0);
+  });
+
+  it("round-trips write then read", async () => {
+    await writeTaskRetryCount(tmpDir, rid, 2);
+    expect(await readTaskRetryCount(tmpDir, rid)).toBe(2);
+  });
+
+  it("saveStage preserves the local retry count", async () => {
+    await writeTaskRetryCount(tmpDir, rid, 1);
+    await saveStage(tmpDir, rid, "media_downloaded", "ok");
+    const stage = await readStage(tmpDir, rid);
+    expect(stage?.stage).toBe("media_downloaded");
+    expect(stage?.retryCount).toBe(1);
+  });
+
+  it("writeTaskRetryCount preserves the current stage", async () => {
+    await saveStage(tmpDir, rid, "asr_completed");
+    await writeTaskRetryCount(tmpDir, rid, 3);
+    const stage = await readStage(tmpDir, rid);
+    expect(stage?.stage).toBe("asr_completed");
+    expect(stage?.retryCount).toBe(3);
+  });
+
+  it("bumps only when the prior status is failed", async () => {
+    await writeTaskRetryCount(tmpDir, rid, 1);
+    expect(await bumpTaskRetryCount(tmpDir, rid, "pending")).toBe(1);
+    expect(await readTaskRetryCount(tmpDir, rid)).toBe(1);
+    expect(await bumpTaskRetryCount(tmpDir, rid, "failed")).toBe(2);
+    expect(await readTaskRetryCount(tmpDir, rid)).toBe(2);
   });
 });
 

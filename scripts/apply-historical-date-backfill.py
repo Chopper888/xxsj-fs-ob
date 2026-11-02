@@ -1,13 +1,14 @@
-﻿import hashlib
+import hashlib
 import importlib.util
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 PREVIEW = ROOT / "docs" / "historical-date-backfill-preview-20260802.json"
-HELPER = Path(os.environ.get("FEISHU_BITABLE_HELPER", ""))
+HELPER = Path(os.environ.get("FEISHU_BITABLE_HELPER", str(ROOT / "feishu_bitable.py")))
 TARGET_FIELDS = ("日期", "收藏时间", "最近错误")
 ALLOWED_CHANGES = {"日期", "收藏时间"}
 

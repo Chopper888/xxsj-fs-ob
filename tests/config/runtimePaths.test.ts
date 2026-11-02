@@ -14,3 +14,4 @@ describe("runtime path injection", () => {
     expect(() => resolveRuntimePaths({}, {})).toThrow("obsidian_vault_path_required");
   });
 });
+

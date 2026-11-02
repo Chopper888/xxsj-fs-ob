@@ -2,6 +2,7 @@ import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { dirname } from "node:path";
 import { chromium, type BrowserContext, type Page } from "playwright";
+import { douyinCaptureRateLimiter } from "./douyinRateLimiter.js";
 
 export const DOUYIN_MOBILE_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 TikTok/26.2.0 TTWebView/TikTokWebView";
@@ -307,6 +308,7 @@ export async function captureDouyinMediaFromPage(
 export async function resolveDouyinMediaWithBrowser(
   options: Omit<CaptureDouyinMediaOptions, "outputPath">,
 ): Promise<ResolvedDouyinMedia> {
+  douyinCaptureRateLimiter.consume();
   let context: BrowserContext | undefined;
   try {
     context = await chromium.launchPersistentContext(options.userDataDir, {
@@ -328,6 +330,7 @@ export async function captureDouyinMediaWithBrowser(
   options: CaptureDouyinMediaOptions,
   onCandidate?: (kind: "preferred" | "fallback") => void,
 ): Promise<CaptureDouyinMediaResult> {
+  douyinCaptureRateLimiter.consume();
   let context: BrowserContext | undefined;
   try {
     context = await chromium.launchPersistentContext(options.userDataDir, {

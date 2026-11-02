@@ -43,9 +43,7 @@ function requireStrings(value: unknown, field: string): string[] {
 
 function requireUsefulInformation(value: unknown): string[] {
   if (Array.isArray(value)) {
-    const items = value.filter((v): v is string => typeof v === "string").map((s) => s.trim()).filter(Boolean);
-    if (!items.length) invalid("useful_information");
-    return [...new Set(items)];
+    return [...new Set(value.filter((v): v is string => typeof v === "string").map((s) => s.trim()).filter(Boolean))];
   }
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -138,3 +136,20 @@ export function buildArticleAnalysisSystemPrompt(primaryCategories: string[]): s
     "processor 固定为 local-ai-analysis，processor_version 固定为 1.0.0。",
   ].join("\n");
 }
+
+export function buildVideoAnalysisSystemPrompt(primaryCategories:string[],mode:"subtitle-first"|"media-first"):string{return["你是本地知识库的 B站视频分析器。只输出一个 JSON 对象，不输出解释或 Markdown。",mode==="subtitle-first"?"输入 primaryText 来自公开官方字幕，不是 ASR；必须忠于字幕和视频元数据。":"输入 primaryText 来自 ASR 转写；可依据上下文识别转写错误，但不得补充来源中不存在的事实。",`primary_category 必须且只能从这些选项选择：${JSON.stringify(primaryCategories)}。`,"必填字段与现有分析 schema 完全一致；还必须原样返回 source_record_id、source_platform、model、processor、processor_version。","processor 固定为 local-ai-analysis，processor_version 固定为 1.0.0。"].join("\n")}
+export function buildYouTubeVideoAnalysisSystemPrompt(primaryCategories: string[], mode: "subtitle-first" | "media-first"): string {
+  return [
+    "你是本地知识库的 YouTube 视频分析器。只输出一个 JSON 对象，不输出解释或 Markdown。",
+    mode === "subtitle-first"
+      ? "输入 primaryText 来自官方字幕，不是 ASR；必须忠于字幕和视频元数据。transcript_corrections 固定返回空数组（官方字幕无需纠错）。"
+      : "输入 primaryText 来自 ASR 转写；可依据上下文识别转写错误，但不得补充来源中不存在的事实。transcript_corrections 必须是对象数组，每项严格包含 original、suggested、reason 三个字符串字段；没有可靠纠错时返回空数组。",
+    `primary_category 必须且只能从这些选项选择：${JSON.stringify(primaryCategories)}。`,
+    "secondary_category 应复用现有值或给出一个克制的建议，不扩展分类体系。",
+    "无法确认时使用空字符串、空数组，并写入 quality_warnings。",
+    "必填字段及类型：summary 字符串；key_points 字符串数组；primary_category 字符串；secondary_category 字符串；useful_information 字符串数组；action_items 字符串数组；transcript_corrections 数组（规则见上）；quality_warnings 字符串数组。",
+    "还必须原样返回 source_record_id、source_platform、model，并返回 processor 和 processor_version。",
+    "processor 固定为 local-ai-analysis，processor_version 固定为 1.0.0。",
+  ].join("\n");
+}
+export function buildSocialPostAnalysisSystemPrompt(primaryCategories:string[]):string{return["你是本地知识库的公开社交 Post 分析器。只输出一个 JSON 对象，不输出解释或 Markdown。","输入 primaryText 是公开 Post 原始正文；必须忠于正文、作者和发布时间。不得根据 mediaHint 猜测图片或视频内容。transcript_corrections 固定返回空数组。",`primary_category 必须且只能从这些选项选择：${JSON.stringify(primaryCategories)}。`,"必填字段及类型：summary 字符串；key_points 字符串数组；primary_category 字符串；secondary_category 字符串；useful_information 字符串数组；action_items 字符串数组；transcript_corrections 空数组；quality_warnings 字符串数组。","还必须原样返回 source_record_id、source_platform、model、processor、processor_version。","processor 固定为 local-ai-analysis，processor_version 固定为 1.0.0。"].join("\n")}

@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 
 const BASE_FIELD_NAMES = [
-  "标题", "原文链接", "来源平台", "作者", "日期", "一级标签", "概述",
-  "二级标签", "去重ID", "处理状态", "备注", "重试次数", "最近错误",
-  "处理时间", "知识库路径", "收藏时间",
+  "标题", "原文链接", "来源平台", "作者", "作品发布日期", "一级标签", "概述",
+  "二级标签", "去重ID", "处理状态", "备注", "最近错误",
+  "处理时间", "知识库路径", "收录日期", "三级标签",
 ];
 
 export function resolveLarkIdentity(value: string | undefined): "bot" | "user" {
@@ -57,18 +57,31 @@ export class LarkCliAdapter {
   }
 
   recordList(): Array<{ record_id: string; fields: Record<string,unknown> }> {
-    const j = this.exec(["+record-list", "--page-size", "50", "--format", "json"]);
-    if (Array.isArray(j.data?.items)) return j.data.items;
-    const fields = j.data?.fields as string[] | undefined;
-    const rows = j.data?.data as unknown[][] | undefined;
-    const recordIds = j.data?.record_id_list as string[] | undefined;
-    if (!fields) throw new Error("lark:unexpected_list_format");
-    return (rows ?? []).map((row, rowIndex) => {
-      const f: Record<string,unknown> = {};
-      for (let i = 0; i < fields.length; i++) f[fields[i]] = row[i];
-      const rid = recordIds?.[rowIndex] ?? "";
-      return { record_id: rid, fields: f };
-    });
+    const pageSize = 200;
+    const records: Array<{ record_id: string; fields: Record<string,unknown> }> = [];
+    let offset = 0;
+    for (;;) {
+      const j = this.exec(["+record-list", "--limit", String(pageSize), "--offset", String(offset), "--format", "json"]);
+      let page: Array<{ record_id: string; fields: Record<string,unknown> }>;
+      if (Array.isArray(j.data?.items)) {
+        page = j.data.items;
+      } else {
+        const fields = j.data?.fields as string[] | undefined;
+        const rows = j.data?.data as unknown[][] | undefined;
+        const recordIds = j.data?.record_id_list as string[] | undefined;
+        if (!fields) throw new Error("lark:unexpected_list_format");
+        page = (rows ?? []).map((row, rowIndex) => {
+          const f: Record<string,unknown> = {};
+          for (let i = 0; i < fields.length; i++) f[fields[i]] = row[i];
+          const rid = recordIds?.[rowIndex] ?? "";
+          return { record_id: rid, fields: f };
+        });
+      }
+      records.push(...page);
+      if (!j.data?.has_more || page.length === 0) break;
+      offset += page.length;
+    }
+    return records;
   }
 
   async recordUpsert(recordId: string, fields: Record<string,unknown>): Promise<void> {

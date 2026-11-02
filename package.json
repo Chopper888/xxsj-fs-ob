@@ -5,7 +5,6 @@
   "type": "module",
   "packageManager": "pnpm@11.7.0",
   "scripts": {
-    "monitor": "tsx src/cli/monitor.ts",
     "login": "tsx scripts/manual-login.ts",
     "task:process": "tsx scripts/process-base-task.ts",
     "task:analyze": "tsx scripts/analyze-base-task.ts",

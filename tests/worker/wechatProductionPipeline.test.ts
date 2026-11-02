@@ -44,3 +44,4 @@ describe("WeChat production text-first pipeline", () => {
   it("classifies deleted as terminal and network as retryable", () => { expect(classifyWechatProductionError(new PlatformAdapterError("article_deleted"))).toEqual({ retryable: false, terminal: true }); expect(classifyWechatProductionError(new PlatformAdapterError("temporary_network"))).toEqual({ retryable: true, terminal: false }); });
   it("passes image warnings through while still completing", async () => { const d = deps(); d.materializeImages.mockResolvedValue({ assets: [], warnings: ["image failed"] }); const result = await runWechatProductionPipeline({ recordId: "rec123456789", taskDir, sourceUrl: content.identity.sourceUrl, declaredPlatform: "公众号", title: "文章", vaultPath: "vault" }, d); expect(result.warnings).toEqual(["image failed"]); expect(d.updateBase).toHaveBeenCalled(); });
 });
+

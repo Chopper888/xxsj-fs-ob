@@ -1,5 +1,5 @@
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
-export type PlatformId = "douyin" | "wechat_official_account" | "bilibili" | "x";
+export type PlatformId = "douyin" | "wechat_official_account" | "bilibili" | "x" | "youtube";
 export type PlatformContentType = "video" | "article" | "post" | "thread" | "mixed";
 
 export interface PlatformIdentity {

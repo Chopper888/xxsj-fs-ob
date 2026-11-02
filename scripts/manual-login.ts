@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { createInterface } from "node:readline/promises";
 import { chromium } from "playwright";
-import { browserLaunchArgs } from "../src/monitor/playwrightMonitor.js";
+import { browserLaunchArgs } from "../src/monitor/browserLaunchArgs.js";
 
 const userDataDir = process.env.BROWSER_USER_DATA_DIR ?? ".browser/douyin";
 const inboxUrl = process.env.DOUYIN_INBOX_URL ?? "https://www.douyin.com";
@@ -23,4 +23,4 @@ rl.close();
 
 await context.close();
 console.log("浏览器已关闭。登录状态已保存至", userDataDir);
-console.log("现在可以运行 pnpm monitor 启动监控。");
+console.log("登录状态已保存。现在可以运行自动 worker 或 pnpm probe:media 使用该登录态。");

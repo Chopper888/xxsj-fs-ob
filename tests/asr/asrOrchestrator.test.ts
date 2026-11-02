@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { transcribeWithFallback, transcribeWithFasterWhisper } from "../../src/asr/asrOrchestrator.js";
+import { prepareQwenMediaUrl } from "../../src/asr/qwenAsrClient.js";
 import {
   classifyQwenError, isRecoverableError, isRetryableError,
   type AsrOrchestratorConfig,
@@ -148,6 +149,75 @@ describe("ASR orchestrator", () => {
     );
     expect(result.model).toBe("large-v3");
     expect(result.provider).not.toBe("whisper-base");
+  });
+
+  it("本地文件路径提交时以 base64 data URI 上传，且不触发 whisper 回退", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "xq-local-"));
+    try {
+      const file = join(dir, "clip.mp4");
+      const bytes = Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]);
+      await writeFile(file, bytes);
+      let submittedUrl = "";
+      const fetchMock = vi.fn()
+        .mockImplementationOnce(async (_url: string, init?: { body?: string }) => {
+          const body = JSON.parse(init?.body ?? "{}");
+          submittedUrl = body.input?.file_url ?? "";
+          return { ok: true, json: vi.fn().mockResolvedValue({ output: { task_id: "task-local" } }) };
+        })
+        .mockResolvedValueOnce({ ok: true, json: vi.fn().mockResolvedValue({ output: { task_status: "SUCCEEDED", result: { transcription_url: "https://x/r" } } }) })
+        .mockResolvedValueOnce({ ok: true, json: vi.fn().mockResolvedValue({ transcripts: [{ text: "Qwen local text." }] }) });
+      const exec = vi.fn();
+
+      const result = await transcribeWithFallback(
+        baseConfig(), file, file, join(dir, "out"),
+        { fetchImpl: fetchMock as never, execFileImpl: exec as never },
+      );
+
+      const prefix = "data:video/mp4;base64,";
+      expect(submittedUrl.startsWith(prefix)).toBe(true);
+      expect(Buffer.from(submittedUrl.slice(prefix.length), "base64").equals(bytes)).toBe(true);
+      expect(result.provider).toBe("qwen-asr");
+      expect(result.fallback).toBeUndefined();
+      expect(exec).not.toHaveBeenCalled();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("prepareQwenMediaUrl", () => {
+  it("data URI 原样透传", async () => {
+    const uri = "data:video/mp4;base64,AAAA";
+    await expect(prepareQwenMediaUrl(uri)).resolves.toBe(uri);
+  });
+
+  it("https URL 走 normalize（非 ASCII 编码）", async () => {
+    await expect(prepareQwenMediaUrl("https://x.com/a 视频.mp4")).resolves.toBe("https://x.com/a%20%E8%A7%86%E9%A2%91.mp4");
+  });
+
+  it("本地路径转 base64 data URI", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "xq-url-"));
+    try {
+      const file = join(dir, "clip.mp4");
+      const bytes = Buffer.from("ffmpeg-ok");
+      await writeFile(file, bytes);
+      const uri = await prepareQwenMediaUrl(file);
+      expect(uri.startsWith("data:video/mp4;base64,")).toBe(true);
+      expect(Buffer.from(uri.slice("data:video/mp4;base64,".length), "base64").equals(bytes)).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("超过大小上限时抛出 qwen_asr_local_file_too_large", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "xq-big-"));
+    try {
+      const file = join(dir, "big.mp4");
+      await writeFile(file, Buffer.alloc(16 * 1024 * 1024 + 1));
+      await expect(prepareQwenMediaUrl(file)).rejects.toThrow("qwen_asr_local_file_too_large");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 

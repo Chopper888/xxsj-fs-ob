@@ -46,10 +46,10 @@ describe("content analysis schema", () => {
     expect(result.useful_information.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("rejects empty useful_information", () => {
-    expect(() => parseAndValidateAnalysis(JSON.stringify({ ...valid, useful_information: [] }), {
+  it("accepts empty useful_information when no usable info exists", () => {
+    expect(parseAndValidateAnalysis(JSON.stringify({ ...valid, useful_information: [] }), {
       recordId: "rec1", platform: "抖音", model: "deepseek-chat", primaryCategories: ["Skill/插件/模型"],
-    })).toThrow("analysis_schema_invalid:useful_information");
+    })).toMatchObject({ useful_information: [] });
   });
 
   it("rejects empty object useful_information", () => {

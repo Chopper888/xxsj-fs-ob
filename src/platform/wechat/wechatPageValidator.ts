@@ -15,3 +15,4 @@ export function validateWechatArticlePage(page: WechatPageSnapshot): { valid: tr
   if (!page.title?.trim() || !page.account?.trim()) throw new WechatArticleError("content_invalid");
   return { valid: true };
 }
+

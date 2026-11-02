@@ -6,7 +6,11 @@ const PLATFORM_DECLARATION_ALIASES: Readonly<Record<string, PlatformId>> = Objec
   "微信公众号": "wechat_official_account",
   "B站": "bilibili",
   "X": "x",
+  "Twitter": "x",
   "推特": "x",
+  "YouTube": "youtube",
+  "Youtube": "youtube",
+  "油管": "youtube",
 });
 
 export function normalizePlatformDeclaration(value: unknown): PlatformId | undefined {
@@ -15,5 +19,5 @@ export function normalizePlatformDeclaration(value: unknown): PlatformId | undef
 
 export function isProductionQueuePlatform(value: unknown): boolean {
   const platform = normalizePlatformDeclaration(value);
-  return platform === "douyin" || platform === "wechat_official_account";
+  return platform === "douyin" || platform === "wechat_official_account" || platform === "bilibili" || platform === "x" || platform === "youtube";
 }

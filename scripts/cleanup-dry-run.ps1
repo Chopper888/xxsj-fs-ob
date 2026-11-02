@@ -1,19 +1,30 @@
-﻿# cleanup-dry-run.ps1 - 缓存清理预演（只读，不删除）
-Write-Host "=== 缓存清理预演 (DRY RUN) ==="
-$dataDir = "data\tasks"
-if (Test-Path $dataDir) {
-    $tasks = Get-ChildItem $dataDir -Directory
-    foreach ($t in $tasks) {
-        $stageFile = Join-Path $t.FullName "stage.json"
-        $mediaFile = Join-Path $t.FullName "media\source.mp4"
-        $tmpFiles = Get-ChildItem $t.FullName -Recurse -Filter "*.tmp*" -ErrorAction SilentlyContinue
-        $stage = if (Test-Path $stageFile) { (Get-Content $stageFile -Raw | ConvertFrom-Json).stage } else { "unknown" }
-        Write-Host "  $($t.Name): stage=$stage"
-        if ($tmpFiles) { foreach ($f in $tmpFiles) { Write-Host "    [可清理] $($f.Name)" } }
-        if ($stage -eq "done" -and (Test-Path $mediaFile)) {
-            $age = (Get-Date) - (Get-Item $mediaFile).LastWriteTime
-            if ($age.TotalDays -gt 7) { Write-Host "    [可清理] source.mp4 (${age}天前)" }
-        }
-    }
-} else { Write-Host "  无任务缓存" }
-Write-Host "=== 仅预演，未实际删除 ==="
+﻿# cleanup-dry-run.ps1 - 任务缓存清理（人工审计入口）
+# 保留策略与自动触发共用同一份 TS 规则实现（src/worker/storageCleanup.ts）：
+#   done 任务 source.mp4 保留 7 天、stage.json 保留 30 天
+#   failed 任务完整目录保留 14 天
+#   临时文件（*.tmp*）无条件清理
+#   处理中（pending/claimed/media_downloaded/...）或状态未知（无 stage.json）的任务绝不删除
+# 本脚本只是调用 TS 通用模块，不做独立判断，避免与自动触发逻辑分叉。
+# 默认 DRY-RUN 只读预演；加 -Execute 才真实删除。
+param([switch]$Execute)
+
+$ErrorActionPreference = 'Stop'
+$root = Split-Path -Parent $PSScriptRoot
+$tsx = Join-Path $root 'node_modules\.bin\tsx.cmd'
+
+if (-not (Test-Path -LiteralPath $tsx)) {
+  Write-Host "错误: 未找到 $tsx，请先在本仓库执行安装（pnpm install）" -ForegroundColor Red
+  exit 1
+}
+
+Push-Location $root
+try {
+  if ($Execute) {
+    & $tsx scripts/run-storage-cleanup.ts --execute
+  } else {
+    & $tsx scripts/run-storage-cleanup.ts --dry-run
+  }
+  exit $LASTEXITCODE
+} finally {
+  Pop-Location
+}

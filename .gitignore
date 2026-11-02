@@ -1,36 +1,25 @@
-﻿.env
-.env.*
-!.env.example
-
 node_modules/
-data/
-logs/
-cache/
-tmp/
-backup/
-review/
-
-worker.lock
-*.log
-*.mp4
-*.wav
-*.mp3
-
-asr-raw.json
-stage.json
-
-.DS_Store
-Thumbs.db
-
-.vscode/
-.idea/
-
 .pnpm-store/
 .venv/
 __pycache__/
 *.py[cod]
 dist/
+.env
+.env.*
+!.env.example
 .browser/
-# Internal project files (not for public repo)
+data/
+logs/
+.DS_Store
+
 /PROJECT-HANDOFF.local.md
-/004-项目档案/
+
+# 一次性调试脚本（内含本机私有路径，不提交）
+scripts/tmp-*
+
+# 敏感登录 cookie（yt-dlp media-first 用），不提交
+cookies/
+
+# Worker 运行时锁文件（含本机 PID 与运行 token）
+worker.lock
+worker.lock.stale-*

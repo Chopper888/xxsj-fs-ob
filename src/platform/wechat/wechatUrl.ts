@@ -20,3 +20,4 @@ export function buildWechatIdentity(raw: string): PlatformIdentity {
   const identityBasis = tuple.every(Boolean) ? tuple.join("|") : canonicalUrl;
   return { platform: "wechat_official_account", platformContentId: stable, sourceUrl: raw, canonicalUrl, dedupeKey: `wechat:${hash(identityBasis)}` };
 }
+

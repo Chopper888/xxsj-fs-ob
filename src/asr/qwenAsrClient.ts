@@ -1,5 +1,44 @@
+import { readFile } from "node:fs/promises";
 import { validateDashscopeApiKey } from "../config/envValidation.js";
 export interface QwenRequestInput { model: string; fileUrl: string; hotwords: string[]; groundTruth?: string }
+
+const LOCAL_MEDIA_MAX_BYTES = 16 * 1024 * 1024;
+const MEDIA_MIME: Record<string, string> = { ".mp4": "video/mp4", ".m4v": "video/mp4", ".webm": "video/webm", ".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".aac": "audio/aac", ".wav": "audio/wav", ".flac": "audio/flac" };
+
+export function normalizeMediaUrlForQwen(rawUrl: string): string {
+  if (!rawUrl) return "";
+  try {
+    const u = new URL(rawUrl);
+    if (!/^https?:$/.test(u.protocol)) throw new Error("invalid_media_url_scheme");
+    const encoded = u.toString();
+    return /[\u0080-\uffff]/.test(encoded) ? encodeURI(rawUrl) : encoded;
+  } catch {
+    if (/[\u0080-\uffff]/.test(rawUrl)) return encodeURI(rawUrl);
+    throw new Error("invalid_media_url_cannot_parse");
+  }
+}
+
+function isLocalMediaPath(rawUrl: string): boolean {
+  if (/^[a-zA-Z]:[\\/]/.test(rawUrl)) return true;
+  if (/^[\\/]/.test(rawUrl)) return true;
+  if (/^\.{1,2}[\\/]/.test(rawUrl)) return true;
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/i.test(rawUrl)) return false;
+  return true;
+}
+
+export async function prepareQwenMediaUrl(rawUrl: string): Promise<string> {
+  if (!rawUrl) return "";
+  if (/^data:/i.test(rawUrl)) return rawUrl;
+  if (isLocalMediaPath(rawUrl)) {
+    const bytes = await readFile(rawUrl);
+    if (bytes.length > LOCAL_MEDIA_MAX_BYTES) throw new Error(`qwen_asr_local_file_too_large:${bytes.length}`);
+    const lower = rawUrl.toLowerCase();
+    const ext = Object.keys(MEDIA_MIME).find((e) => lower.endsWith(e)) ?? "";
+    const mime = MEDIA_MIME[ext] ?? "application/octet-stream";
+    return `data:${mime};base64,${bytes.toString("base64")}`;
+  }
+  return normalizeMediaUrlForQwen(rawUrl);
+}
 
 export function requireDashscopeKey(value: string | undefined): string {
   const normalized = value?.trim();

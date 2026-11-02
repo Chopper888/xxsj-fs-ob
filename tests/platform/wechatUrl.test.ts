@@ -27,3 +27,4 @@ describe("wechat URL and identity", () => {
     expect(a.dedupeKey).not.toBe(b.dedupeKey);
   });
 });
+

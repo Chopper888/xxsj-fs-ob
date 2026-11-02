@@ -6,10 +6,17 @@ import type { NormalizedMedia } from "../types.js";
 type FetchLike = typeof fetch;
 export interface WechatLocalAsset { sourceUrl: string; localPath: string; markdownPath: string; order: number; contentType: string; bytes: number; alt?: string }
 export interface WechatAssetResult { assets: WechatLocalAsset[]; warnings: string[] }
-export interface WechatAssetOptions { taskDir: string; articleUrl: string; fetchImpl?: FetchLike; retries?: number }
+export interface WechatAssetOptions { taskDir: string; articleUrl: string; fetchImpl?: FetchLike; retries?: number; magicBytes?: boolean }
 export interface WechatVaultAssetOptions { vaultPath: string; targetDir: string; dedupeKey: string }
 const UA = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36 MicroMessenger/8.0.49";
 const EXT: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp", "image/svg+xml": "svg" };
+const MAGIC: Record<string, (b: Uint8Array) => boolean> = {
+  "image/jpeg": b => b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  "image/png": b => b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 && b[4] === 0x0d && b[5] === 0x0a && b[6] === 0x1a && b[7] === 0x0a,
+  "image/gif": b => b.length >= 4 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38,
+  "image/webp": b => b.length >= 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50,
+  "image/svg+xml": b => { const head = new TextDecoder().decode(b.slice(0, 512)).replace(/^\uFEFF/, "").trimStart(); return head.startsWith("<svg") || (head.startsWith("<?xml") && head.includes("<svg")); },
+};
 
 export async function materializeWechatImages(media: NormalizedMedia[], options: WechatAssetOptions): Promise<WechatAssetResult> {
   const fetchImpl = options.fetchImpl ?? fetch; const retries = Math.max(0, Math.min(options.retries ?? 2, 4));
@@ -34,6 +41,7 @@ export async function materializeWechatImages(media: NormalizedMedia[], options:
         const contentType = (response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
         if (!contentType.startsWith("image/") || !EXT[contentType]) throw new Error(`image_content_type_invalid:${contentType || "missing"}`);
         const bytes = new Uint8Array(await response.arrayBuffer()); if (!bytes.length) throw new Error("image_empty");
+        if (options.magicBytes && !MAGIC[contentType]?.(bytes)) throw new Error(`image_magic_invalid:${contentType}`);
         const order = item.order ?? assets.length + 1; const digest = createHash("sha256").update(sourceUrl).digest("hex").slice(0, 12);
         const filename = `${String(order).padStart(3, "0")}-${digest}.${EXT[contentType]}`; const localPath = join(dir, filename);
         await writeFile(localPath, bytes); assets.push({ sourceUrl, localPath, markdownPath: `assets/${filename}`, order, contentType, bytes: bytes.length, alt: item.alt }); lastError = ""; break;
@@ -56,3 +64,4 @@ export async function persistWechatAssetsToVault(result: WechatAssetResult, opti
   }
   return { assets, warnings: result.warnings };
 }
+

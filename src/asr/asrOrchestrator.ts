@@ -3,7 +3,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   buildQwenArtifact, buildQwenRequest, extractQwenTranscript,
-  fetchQwenTranscriptionResult, pollQwenTask, requireDashscopeKey, submitQwenTask,
+  fetchQwenTranscriptionResult, pollQwenTask, prepareQwenMediaUrl, requireDashscopeKey, submitQwenTask,
   type QwenHttpOptions,
 } from "./qwenAsrClient.js";
 import {
@@ -18,6 +18,7 @@ interface OrchestratorDeps {
   execFileImpl?: ExecFile;
   fetchImpl?: typeof fetch;
   sleepImpl?: (ms: number) => Promise<void>;
+  logger?: (line: string) => void;
 }
 
 interface WhisperOutput {
@@ -99,18 +100,7 @@ export async function transcribeWithFasterWhisper(
   };
 }
 
-export function normalizeMediaUrlForQwen(rawUrl: string): string {
-  if (!rawUrl) return "";
-  try {
-    const u = new URL(rawUrl);
-    if (!/^https?:$/.test(u.protocol)) throw new Error("invalid_media_url_scheme");
-    const encoded = u.toString();
-    return /[\u0080-\uffff]/.test(encoded) ? encodeURI(rawUrl) : encoded;
-  } catch {
-    if (/[\u0080-\uffff]/.test(rawUrl)) return encodeURI(rawUrl);
-    throw new Error("invalid_media_url_cannot_parse");
-  }
-}
+export { normalizeMediaUrlForQwen } from "./qwenAsrClient.js";
 
 async function tryQwenOnce(
   config: AsrOrchestratorConfig["qwen"],
@@ -119,7 +109,7 @@ async function tryQwenOnce(
   fetchImpl: typeof fetch,
 ): Promise<AsrTranscriptionResult> {
   const apiKey = requireDashscopeKey(config.apiKey);
-  const normalizedUrl = normalizeMediaUrlForQwen(mediaUrl);
+  const normalizedUrl = await prepareQwenMediaUrl(mediaUrl);
   const request = buildQwenRequest({ model: config.model, fileUrl: normalizedUrl, hotwords });
   const options: QwenHttpOptions = { endpoint: config.endpoint, apiKey, request, fetchImpl };
   const started = Date.now();
@@ -175,6 +165,7 @@ export async function transcribeWithFallback(
   const execFileImpl = deps.execFileImpl ?? nodeExecFile;
   const fetchImpl = deps.fetchImpl ?? fetch;
   const sleepImpl = deps.sleepImpl ?? sleep;
+  const log = deps.logger ?? ((line: string) => console.error(`[asr] ${line}`));
 
   if (config.mode === "large-v3-only") {
     return transcribeWithFasterWhisper(config.whisper, mediaPath, outputDir, execFileImpl);
@@ -183,6 +174,7 @@ export async function transcribeWithFallback(
   try {
     requireDashscopeKey(config.qwen.apiKey);
   } catch {
+    log("qwen skipped (auth): key missing or placeholder -> fallback to faster-whisper");
     const fallback: AsrFallbackRecord = {
       primary_provider: "qwen-asr",
       primary_model: config.qwen.model,
@@ -205,8 +197,10 @@ export async function transcribeWithFallback(
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       lastCategory = classifyQwenError(err);
+      log(`qwen attempt ${attempt + 1}/${maxAttempts} failed category=${lastCategory}: ${err.message}`);
 
       if (lastCategory === "auth") {
+        log(`qwen auth error, fallback to faster-whisper-large-v3`);
         const fallback = buildFallbackRecord(err, attempt, config);
         const result = await transcribeWithFasterWhisper(config.whisper, mediaPath, outputDir, execFileImpl);
         return { ...result, fallback };
@@ -214,16 +208,19 @@ export async function transcribeWithFallback(
 
       if (isRetryableError(lastCategory) && attempt < maxAttempts - 1) {
         const delay = Math.min(2_000 * Math.pow(2, attempt), 16_000);
+        log(`qwen retryable, retrying in ${delay}ms`);
         await sleepImpl(delay);
         continue;
       }
 
       if (isRecoverableError(lastCategory)) {
+        log(`qwen error recovered-fallback, fallback to faster-whisper-large-v3`);
         const fallback = buildFallbackRecord(err, attempt, config);
         const result = await transcribeWithFasterWhisper(config.whisper, mediaPath, outputDir, execFileImpl);
         return { ...result, fallback };
       }
 
+      log(`qwen non-recoverable error, fallback to faster-whisper-large-v3`);
       const fallback = buildFallbackRecord(err, attempt, config);
       const result = await transcribeWithFasterWhisper(config.whisper, mediaPath, outputDir, execFileImpl);
       return { ...result, fallback };

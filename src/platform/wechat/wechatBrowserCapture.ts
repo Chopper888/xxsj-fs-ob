@@ -20,3 +20,4 @@ export async function captureWechatArticleWithBrowser(options: CaptureWechatOpti
     return await page.evaluate(WECHAT_SNAPSHOT_SCRIPT) as WechatPageSnapshot;
   } finally { await context.close(); }
 }
+

@@ -187,7 +187,7 @@ if ($isCodex) {
 
 # ===== 10.5 SECRET CHECK =====
 
-$envExample = Join-Path $SkillPath "config\.env.example"
+$envExample = Join-Path $SkillPath ".env.example"
 if (Test-Path -LiteralPath $envExample -PathType Leaf) {
     $envText = Get-Content $envExample -Raw -ErrorAction SilentlyContinue
     $secretKeys = @("APP_SECRET", "API_KEY", "TOKEN", "COOKIE", "AUTHORIZATION")

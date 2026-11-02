@@ -1,4 +1,4 @@
-﻿import "dotenv/config";
+import "dotenv/config";
 import { createHash } from "node:crypto";
 import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -23,7 +23,7 @@ function required(name: string): string {
 }
 
 async function baseFields(): Promise<Record<string, unknown>> {
-  const token = process.env.FEISHU_TOKEN_VALUE?.trim() || (await readFile(process.env.FEISHU_TOKEN_FILE ?? process.env.FEISHU_TOKEN_FILE ?? path.join(process.env.XXSJ_FS_OB_PROJECT_ROOT ?? ".", "feishu_token.txt"), "utf8")).trim();
+  const token = process.env.FEISHU_TOKEN_VALUE?.trim() || (await readFile(process.env.FEISHU_TOKEN_FILE ?? ".feishu_token.txt", "utf8")).trim();
   const url = `https://open.feishu.cn/open-apis/bitable/v1/apps/${required("FEISHU_BASE_TOKEN")}/tables/${required("FEISHU_TABLE_ID")}/records/${RECORD_ID}`;
   const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   const payload = await response.json() as any;

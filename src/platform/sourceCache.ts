@@ -9,11 +9,13 @@ export function normalizedContentCachePath(taskDir: string): string { return joi
 function valid(value: unknown, expected: PlatformIdentity): value is NormalizedContent {
   if (!value || typeof value !== "object") return false;
   const content = value as NormalizedContent;
-  return content.contentType === "article"
+  const analyzableArticle = content.contentType === "article" && content.texts?.some(part => part.role === "primary" && part.text.trim().length >= 20);
+  const validVideo = content.contentType === "video" && Boolean(content.title?.trim()) && content.media?.some(media => media.kind === "video");
+  const validPost = content.contentType === "post" && content.texts?.some(part => part.role === "primary" && part.text.trim().length > 0);
+  return (analyzableArticle || validVideo || validPost)
     && content.identity?.platform === expected.platform
     && (!expected.dedupeKey || content.identity?.dedupeKey === expected.dedupeKey || Boolean(content.identity?.dedupeAliases?.includes(expected.dedupeKey)))
-    && content.identity?.canonicalUrl === expected.canonicalUrl
-    && content.texts?.some(part => part.role === "primary" && part.text.trim().length >= 20);
+    && content.identity?.canonicalUrl === expected.canonicalUrl;
 }
 
 export async function loadNormalizedContentCache(taskDir: string, expected: PlatformIdentity): Promise<NormalizedContent | null> {
@@ -34,5 +36,5 @@ export async function saveNormalizedContentCache(taskDir: string, content: Norma
 
 function fingerprint(content: NormalizedContent): string {
   const primary = content.texts.find(part => part.role === "primary")?.text ?? "";
-  return createHash("sha256").update(`${content.identity.dedupeKey}\n${primary}`, "utf8").digest("hex");
+  return createHash("sha256").update(`${content.identity.dedupeKey}\n${content.contentType}\n${content.title ?? ""}\n${primary}`, "utf8").digest("hex");
 }

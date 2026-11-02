@@ -9,7 +9,7 @@
 - `scripts/run-auto-worker.ts` - Worker CLI 入口
 
 ## 状态机
-Base 字段 `处理状态`: pending → processing → done / failed
+Base 字段 `处理状态`: pending → processing → done / failed（`draft_ready` 也会被领取）
 内部 stage: claimed → media_downloaded → asr_completed → analysis_completed → obsidian_written → done
 
 ## 数据流

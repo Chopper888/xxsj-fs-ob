@@ -1,5 +1,14 @@
-import type { SummaryResult } from "../domain/types.js";
-import type { SummaryClient, SummaryPrompt } from "./summarizer.js";
+import type { ContentType, SummaryResult } from "../domain/types.js";
+
+interface SummaryPrompt {
+  title: string;
+  text: string;
+  contentType: ContentType;
+}
+
+interface SummaryClient {
+  summarizeText(prompt: SummaryPrompt): Promise<SummaryResult>;
+}
 
 type FetchLike = typeof fetch;
 

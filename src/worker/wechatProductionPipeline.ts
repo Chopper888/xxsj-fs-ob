@@ -51,3 +51,4 @@ export async function runWechatProductionPipeline(input: WechatPipelineInput, de
   await stage("base_done"); await deps.updateBase({ "处理状态": "done", "知识库路径": note.finalPath, "处理时间": Date.now() });
   return { preparationMode: "text-first", warnings: assets.warnings, notePath: note.finalPath };
 }
+
