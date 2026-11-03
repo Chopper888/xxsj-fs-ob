@@ -35,7 +35,7 @@ export async function acquireBilibili(ref: BilibiliVideoRef, fetcher: Fetcher = 
   if (!item?.subtitle_url) return { video };
   const body = await json(fetcher, String(item.subtitle_url).replace(/^\/\//, "https://"), referer);
   const text = (body.body ?? []).map((x: any) => String(x.content ?? "").trim()).filter(Boolean).join("\n");
-  return { video, ...(text ? { subtitle: { lang: String(item.lan ?? ""), text } } : {}) };
+  return { video, ...(text ? { subtitle: { lang: String(item["lan"] ?? ""), text } } : {}) };
 }
 export async function acquireBilibiliMediaUrl(bvid: string, cid: number, fetcher: Fetcher = fetch): Promise<BilibiliDashStreams> {
   const referer = `https://www.bilibili.com/video/${encodeURIComponent(bvid)}/`;

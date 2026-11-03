@@ -26,7 +26,8 @@ import { toAnalysisInput } from "../src/platform/contentPreparation.js";
 import { buildDouyinAnalysisRequest } from "../src/analysis/analysisRequest.js";
 import { transcribeWithFallback } from "../src/asr/asrOrchestrator.js";
 import { buildOrchestratorConfigFromEnv } from "../src/asr/providers.js";
-import { parseAndValidateAnalysis, buildAnalysisSystemPrompt, buildArticleAnalysisSystemPrompt, buildVideoAnalysisSystemPrompt, buildSocialPostAnalysisSystemPrompt, buildYouTubeVideoAnalysisSystemPrompt } from "../src/analysis/contentAnalysis.js";
+import { completeValidatedAnalysis, buildAnalysisSystemPrompt, buildArticleAnalysisSystemPrompt, buildVideoAnalysisSystemPrompt, buildSocialPostAnalysisSystemPrompt, buildYouTubeVideoAnalysisSystemPrompt } from "../src/analysis/contentAnalysis.js";
+import { resolvePrimaryCategories } from "../src/analysis/primaryCategories.js";
 import { OpenAICompatibleSummaryClient } from "../src/summary/openaiCompatibleClient.js";
 import { loadConfigFromEnv } from "../src/config.js";
 import { isRetryEligible, prepareAttemptFields, selectRunnableRecordIds, shouldContinuePolling } from "../src/worker/workerLifecycle.js";
@@ -108,7 +109,7 @@ function sanitizeFilename(raw: string): string {
   return raw.replace(ILLEGAL, "-").replace(/\s+/g, " ").trim().slice(0, 160) || "untitled";
 }
 
-async function processTask(recordId: string, faultAfterStage?: ProcessStage) {
+async function processTask(recordId: string, primaryCategories: string[], faultAfterStage?: ProcessStage) {
   validateRecordId(recordId);
   const workerId = randomUUID().slice(0, 8);
   const taskDir = join(root, "data", "tasks", recordId);
@@ -145,7 +146,7 @@ async function processTask(recordId: string, faultAfterStage?: ProcessStage) {
       materializeMedia: async () => { throw new Error("wechat_media_materialization_forbidden"); }, transcribe: async () => { throw new Error("wechat_asr_forbidden"); },
       materializeImages: content => materializeWechatImages(content.media, { taskDir, articleUrl: content.identity.canonicalUrl }),
       persistImages: (content, assets) => persistWechatAssetsToVault(assets, { vaultPath: obsidianVaultPath, targetDir: join(process.env.OBSIDIAN_INBOX_DIR ?? "000-Inbox\\001-信息中心", "公众号"), dedupeKey: content.identity.dedupeKey }),
-      analyze: async analysisInput => { const config = loadConfigFromEnv(process.env); const primaryCategories = ["AI Agent/编程", "Skill/插件/模型", "ComfyUI/AI绘画", "AI行业动态/资讯", "其他"]; const client = new OpenAICompatibleSummaryClient({ baseUrl: config.summary.baseUrl, apiKey: config.summary.apiKey, model: config.summary.model }); const payload = { ...analysisInput, source_record_id: recordId, source_platform: platform, required_provenance: { source_record_id: recordId, source_platform: platform, processor: "local-ai-analysis", model: config.summary.model, processor_version: "1.0.0" } }; const raw = await client.completeJson(buildArticleAnalysisSystemPrompt(primaryCategories), payload); return parseAndValidateAnalysis(raw, { recordId, platform, model: config.summary.model, primaryCategories }); },
+      analyze: async analysisInput => { const config = loadConfigFromEnv(process.env); const client = new OpenAICompatibleSummaryClient({ baseUrl: config.summary.baseUrl, apiKey: config.summary.apiKey, model: config.summary.model }); const payload = { ...analysisInput, source_record_id: recordId, source_platform: platform, required_provenance: { source_record_id: recordId, source_platform: platform, processor: "local-ai-analysis", model: config.summary.model, processor_version: "1.0.0" } }; return completeValidatedAnalysis(client, buildArticleAnalysisSystemPrompt(primaryCategories), payload, { recordId, platform, model: config.summary.model, primaryCategories }); },
       writeNote: note => writeMarkdownAtomically({ ...note, targetDir: join(process.env.OBSIDIAN_INBOX_DIR ?? "000-Inbox\\001-信息中心", "公众号"), naming: "title-workid" }),
       updateBase: update => updateRecord(recordId, update), setStage,
     });
@@ -159,7 +160,7 @@ async function processTask(recordId: string, faultAfterStage?: ProcessStage) {
       resolveContent: async () => { const normalized=await adapter.normalizeUrl({sourceUrl,declaredPlatform:platform,dedupeKey},platformContext);const identity=await adapter.resolveIdentity(normalized,platformContext);return adapter.resolveContent(identity,platformContext); },
       materializeMedia: async content => { if(!adapter.materializeMedia)throw new Error("bilibili_media_materializer_missing");return adapter.materializeMedia(content,platformContext); },
       transcribe: async media => { const item=media[0];if(!item)throw new Error("bilibili_media_missing");const outputDir=join(taskDir,"transcript");const result=await transcribeWithFallback(buildOrchestratorConfigFromEnv(process.env),item.mediaUrl??item.localPath,item.localPath,outputDir);await mkdir(outputDir,{recursive:true});await writeFile(join(outputDir,"whisper.json"),JSON.stringify(result,null,2),"utf8");return{text:result.text,provider:result.provider,segments:result.segments}; },
-      analyze: async (analysisInput,mode) => { const config=loadConfigFromEnv(process.env);const primaryCategories=["AI Agent/编程","Skill/插件/模型","ComfyUI/AI绘画","AI行业动态/资讯","其他"];const client=new OpenAICompatibleSummaryClient({baseUrl:config.summary.baseUrl,apiKey:config.summary.apiKey!,model:config.summary.model});const payload={...analysisInput,source_record_id:recordId,source_platform:platform,required_provenance:{source_record_id:recordId,source_platform:platform,processor:"local-ai-analysis",model:config.summary.model,processor_version:"1.0.0"}};const raw=await client.completeJson(buildVideoAnalysisSystemPrompt(primaryCategories,mode),payload);return parseAndValidateAnalysis(raw,{recordId,platform,model:config.summary.model,primaryCategories}); },
+      analyze: async (analysisInput,mode) => { const config=loadConfigFromEnv(process.env);const client=new OpenAICompatibleSummaryClient({baseUrl:config.summary.baseUrl,apiKey:config.summary.apiKey!,model:config.summary.model});const payload={...analysisInput,source_record_id:recordId,source_platform:platform,required_provenance:{source_record_id:recordId,source_platform:platform,processor:"local-ai-analysis",model:config.summary.model,processor_version:"1.0.0"}};return completeValidatedAnalysis(client,buildVideoAnalysisSystemPrompt(primaryCategories,mode),payload,{recordId,platform,model:config.summary.model,primaryCategories}); },
       writeNote: note => { const inbox=process.env.OBSIDIAN_INBOX_DIR??"000-Inbox\\001-信息中心";return writeMarkdownAtomically({...note,targetDir:join(inbox,"B站"),naming:"title-workid"}); },
       updateBase:update=>updateRecord(recordId,update),setStage,
     });
@@ -190,7 +191,7 @@ async function processTask(recordId: string, faultAfterStage?: ProcessStage) {
       },
       materializeImages: content => materializeWechatImages(content.media, { taskDir, articleUrl: content.identity.canonicalUrl, magicBytes: true }),
       persistImages: (content, assets) => { const inbox = process.env.OBSIDIAN_INBOX_DIR ?? "000-Inbox\\001-信息中心"; return persistWechatAssetsToVault(assets, { vaultPath: obsidianVaultPath, targetDir: join(inbox, "推特"), dedupeKey: content.identity.dedupeKey }); },
-      analyze: async analysisInput => { const config = loadConfigFromEnv(process.env); const primaryCategories = ["AI Agent/编程","Skill/插件/模型","ComfyUI/AI绘画","AI行业动态/资讯","其他"]; const client = new OpenAICompatibleSummaryClient({ baseUrl: config.summary.baseUrl, apiKey: config.summary.apiKey!, model: config.summary.model }); const prompt = buildSocialPostAnalysisSystemPrompt(primaryCategories); const payload = { ...analysisInput, source_record_id: recordId, source_platform: platform, required_provenance: { source_record_id: recordId, source_platform: platform, processor: "local-ai-analysis", model: config.summary.model, processor_version: "1.0.0" } }; const context = { recordId, platform, model: config.summary.model, primaryCategories }; for (let attempt = 1; ; attempt++) { try { return parseAndValidateAnalysis(await client.completeJson(prompt, payload), context); } catch (e) { if (attempt >= 2 || !(e instanceof Error) || !e.message.startsWith("analysis_schema_invalid:")) throw e; console.warn(`[${recordId.slice(-8)}] 分析 JSON 不合 schema，重试(${attempt}/2)...`); } } },
+      analyze: async analysisInput => { const config = loadConfigFromEnv(process.env); const client = new OpenAICompatibleSummaryClient({ baseUrl: config.summary.baseUrl, apiKey: config.summary.apiKey!, model: config.summary.model }); const prompt = buildSocialPostAnalysisSystemPrompt(primaryCategories); const payload = { ...analysisInput, source_record_id: recordId, source_platform: platform, required_provenance: { source_record_id: recordId, source_platform: platform, processor: "local-ai-analysis", model: config.summary.model, processor_version: "1.0.0" } }; return completeValidatedAnalysis(client, prompt, payload, { recordId, platform, model: config.summary.model, primaryCategories }); },
       writeNote: note => { const inbox = process.env.OBSIDIAN_INBOX_DIR ?? "000-Inbox\\001-信息中心"; return writeMarkdownAtomically({ ...note, targetDir: join(inbox, "推特"), naming: "title-workid" }); },
       updateBase: update => updateRecord(recordId, update), setStage,
     });
@@ -205,7 +206,7 @@ async function processTask(recordId: string, faultAfterStage?: ProcessStage) {
       resolveContent: async () => { const normalized = await adapter.normalizeUrl({ sourceUrl, declaredPlatform: platform, dedupeKey }, platformContext); const identity = await adapter.resolveIdentity(normalized, platformContext); return adapter.resolveContent(identity, platformContext); },
       materializeMedia: async content => { if (!adapter.materializeMedia) throw new Error("youtube_media_materializer_missing"); return adapter.materializeMedia(content, platformContext); },
       transcribe: async media => { const item = media[0]; if (!item) throw new Error("youtube_media_missing"); const outputDir = join(taskDir, "transcript"); const result = await transcribeWithFallback(buildOrchestratorConfigFromEnv(process.env), item.localPath, item.localPath, outputDir); await mkdir(outputDir, { recursive: true }); await writeFile(join(outputDir, "whisper.json"), JSON.stringify(result, null, 2), "utf8"); return { text: result.text, provider: result.provider, segments: result.segments }; },
-      analyze: async (analysisInput, mode) => { const config = loadConfigFromEnv(process.env); const primaryCategories = ["AI Agent/编程", "Skill/插件/模型", "ComfyUI/AI绘画", "AI行业动态/资讯", "其他"]; const client = new OpenAICompatibleSummaryClient({ baseUrl: config.summary.baseUrl, apiKey: config.summary.apiKey!, model: config.summary.model }); const payload = { ...analysisInput, source_record_id: recordId, source_platform: platform, required_provenance: { source_record_id: recordId, source_platform: platform, processor: "local-ai-analysis", model: config.summary.model, processor_version: "1.0.0" } }; const raw = await client.completeJson(buildYouTubeVideoAnalysisSystemPrompt(primaryCategories, mode), payload); return parseAndValidateAnalysis(raw, { recordId, platform, model: config.summary.model, primaryCategories }); },
+      analyze: async (analysisInput, mode) => { const config = loadConfigFromEnv(process.env); const client = new OpenAICompatibleSummaryClient({ baseUrl: config.summary.baseUrl, apiKey: config.summary.apiKey!, model: config.summary.model }); const payload = { ...analysisInput, source_record_id: recordId, source_platform: platform, required_provenance: { source_record_id: recordId, source_platform: platform, processor: "local-ai-analysis", model: config.summary.model, processor_version: "1.0.0" } }; return completeValidatedAnalysis(client, buildYouTubeVideoAnalysisSystemPrompt(primaryCategories, mode), payload, { recordId, platform, model: config.summary.model, primaryCategories }); },
       writeNote: note => { const inbox = process.env.OBSIDIAN_INBOX_DIR ?? "000-Inbox\\001-信息中心"; return writeMarkdownAtomically({ ...note, targetDir: join(inbox, "YouTube"), naming: "title-workid" }); },
       updateBase: update => updateRecord(recordId, update), setStage,
     });
@@ -221,7 +222,7 @@ async function processTask(recordId: string, faultAfterStage?: ProcessStage) {
       transcribe: async () => { throw new Error("douyin_note_asr_forbidden"); },
       materializeImages: content => materializeWechatImages(content.media, { taskDir, articleUrl: content.identity.canonicalUrl, magicBytes: true }),
       persistImages: (content, assets) => { const inbox = process.env.OBSIDIAN_INBOX_DIR ?? "000-Inbox\\001-信息中心"; return persistWechatAssetsToVault(assets, { vaultPath: obsidianVaultPath, targetDir: join(inbox, "抖音"), dedupeKey: content.identity.dedupeKey }); },
-      analyze: async analysisInput => { const config = loadConfigFromEnv(process.env); const primaryCategories = ["AI Agent/编程", "Skill/插件/模型", "ComfyUI/AI绘画", "AI行业动态/资讯", "其他"]; const client = new OpenAICompatibleSummaryClient({ baseUrl: config.summary.baseUrl, apiKey: config.summary.apiKey!, model: config.summary.model }); const payload = { ...analysisInput, source_record_id: recordId, source_platform: platform, required_provenance: { source_record_id: recordId, source_platform: platform, processor: "local-ai-analysis", model: config.summary.model, processor_version: "1.0.0" } }; const raw = await client.completeJson(buildArticleAnalysisSystemPrompt(primaryCategories), payload); return parseAndValidateAnalysis(raw, { recordId, platform, model: config.summary.model, primaryCategories }); },
+      analyze: async analysisInput => { const config = loadConfigFromEnv(process.env); const client = new OpenAICompatibleSummaryClient({ baseUrl: config.summary.baseUrl, apiKey: config.summary.apiKey!, model: config.summary.model }); const payload = { ...analysisInput, source_record_id: recordId, source_platform: platform, required_provenance: { source_record_id: recordId, source_platform: platform, processor: "local-ai-analysis", model: config.summary.model, processor_version: "1.0.0" } }; return completeValidatedAnalysis(client, buildArticleAnalysisSystemPrompt(primaryCategories), payload, { recordId, platform, model: config.summary.model, primaryCategories }); },
       writeNote: note => { const inbox = process.env.OBSIDIAN_INBOX_DIR ?? "000-Inbox\\001-信息中心"; return writeMarkdownAtomically({ ...note, targetDir: join(inbox, "抖音"), naming: "title-workid" }); },
       updateBase: update => updateRecord(recordId, update), setStage,
     });
@@ -291,14 +292,12 @@ async function processTask(recordId: string, faultAfterStage?: ProcessStage) {
     await setStage("deepseek", 5);
     console.log(`[${recordId.slice(-8)}] DeepSeek...`);
     const asr = JSON.parse(await readFile(join(taskDir, "transcript", "whisper.json"), "utf8"));
-    let primaryCategories: string[] = ["AI Agent/编程", "Skill/插件/模型", "ComfyUI/AI绘画", "AI行业动态/资讯", "其他"];
 
     const config = loadConfigFromEnv(process.env);
     const normalized = await adapter.normalizeUrl({ sourceUrl, declaredPlatform: platform, dedupeKey }, platformContext); const identity = await adapter.resolveIdentity(normalized, platformContext); const source = { ...(await adapter.resolveContent(identity, platformContext)), title }; const analysisInput = toAnalysisInput(recordId, { source, texts: [{ origin: "asr", role: "primary", text: asr.text, provider: asr.provider }], primaryText: asr.text, transcript: { text: asr.text, provider: asr.provider, segments: asr.segments }, preparationMode: "media-first" });
     const input = buildDouyinAnalysisRequest(analysisInput, { sourcePlatform: platform, sourceUrl, model: config.summary.model, segmentCount: asr.segments?.length ?? 0 });
     const client = new OpenAICompatibleSummaryClient({ baseUrl: config.summary.baseUrl, apiKey: config.summary.apiKey, model: config.summary.model });
-    const raw = await client.completeJson(buildAnalysisSystemPrompt(primaryCategories), input);
-    const result = parseAndValidateAnalysis(raw, { recordId, platform, model: config.summary.model, primaryCategories });
+    const result = await completeValidatedAnalysis(client, buildAnalysisSystemPrompt(primaryCategories), input, { recordId, platform, model: config.summary.model, primaryCategories });
     const analysisDir = join(taskDir, "analysis");
     await mkdir(analysisDir, { recursive: true });
     await writeFile(join(analysisDir, "result.json"), JSON.stringify(result, null, 2) + "\n", "utf8");
@@ -408,12 +407,18 @@ async function main() {
       try { await readFile(stopPath); shouldStop = true; } catch {}
       if (shouldStop) break;
 
+      const primaryCategories = await resolvePrimaryCategories(
+        () => larkAdapter.readSelectOptions("一级标签"),
+        (message) => console.warn(message),
+      );
+      console.log(`[config] 一级标签选项: ${primaryCategories.join(" / ")}`);
+
       const records = larkAdapter.recordList();
       await publishStatus({ queue: await queueSnapshot(records), last_heartbeat_at: new Date().toISOString() });
       const recordIds = args.recordIds.length ? args.recordIds : await selectRunnableRecordIds(root, records, args.maxTasks);
       for (const rid of recordIds) {
         if (shouldStop || completed >= args.maxTasks) break;
-        try { if (await processTask(rid, args.faultAfterStage)) completed++; }
+        try { if (await processTask(rid, primaryCategories, args.faultAfterStage)) completed++; }
         catch (e) {
           if (e instanceof PlatformAdapterError && e.code === "rate_limited") {
             console.error(`[${rid.slice(-8)}] 平台限流已达上限，任务延后到下一轮处理`);

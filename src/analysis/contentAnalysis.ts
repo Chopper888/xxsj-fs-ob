@@ -42,29 +42,40 @@ function requireStrings(value: unknown, field: string): string[] {
 }
 
 function requireUsefulInformation(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return [...new Set(value.filter((v): v is string => typeof v === "string").map((s) => s.trim()).filter(Boolean))];
-  }
   if (typeof value === "string") {
     const trimmed = value.trim();
-    if (!trimmed) invalid("useful_information");
-    return [trimmed];
+    return trimmed ? [trimmed] : [];
   }
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    const leaves = extractLeafStrings(value as Record<string, unknown>);
-    if (!leaves.length) invalid("useful_information");
-    return [...new Set(leaves)];
-  }
-  invalid("useful_information");
+  if (value && typeof value === "object") return [...new Set(extractLeafStrings(value))];
+  return [];
 }
 
-function extractLeafStrings(obj: Record<string, unknown>): string[] {
-  const result: string[] = [];
-  for (const [, v] of Object.entries(obj)) {
-    if (typeof v === "string") { const t = v.trim(); if (t) result.push(t); }
-    else if (v && typeof v === "object" && !Array.isArray(v)) result.push(...extractLeafStrings(v as Record<string, unknown>));
+function extractLeafStrings(value: unknown): string[] {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? [trimmed] : [];
   }
+  if (Array.isArray(value)) return value.flatMap(extractLeafStrings);
+  if (!value || typeof value !== "object") return [];
+  const result: string[] = [];
+  for (const nested of Object.values(value as Record<string, unknown>)) result.push(...extractLeafStrings(nested));
   return result;
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function normalizeTranscriptCorrections(value: unknown): TranscriptCorrection[] {
+  if (!Array.isArray(value)) invalid("transcript_corrections");
+  return value.flatMap((item): TranscriptCorrection[] => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const object = item as Record<string, unknown>;
+    const original = nonEmptyString(object.original);
+    const suggested = nonEmptyString(object.suggested);
+    const reason = nonEmptyString(object.reason ?? object.context);
+    return original && suggested && reason ? [{ original, suggested, reason }] : [];
+  });
 }
 
 export function parseAndValidateAnalysis(raw: string, context: AnalysisValidationContext): ContentAnalysisResult {
@@ -79,21 +90,7 @@ export function parseAndValidateAnalysis(raw: string, context: AnalysisValidatio
   const input = value as Record<string, unknown>;
   const primary = requireString(input.primary_category, "primary_category");
   if (!context.primaryCategories.includes(primary)) invalid("primary_category");
-  const corrections = input.transcript_corrections;
-  if (!Array.isArray(corrections)) invalid("transcript_corrections");
-  const normalizedCorrections = corrections.map((item, index) => {
-    if (!item || typeof item !== "object" || Array.isArray(item)) invalid(`transcript_corrections.${index}`);
-    const object = item as Record<string, unknown>;
-    return {
-      original: requireString(object.original, `transcript_corrections.${index}.original`),
-      suggested: requireString(object.suggested, `transcript_corrections.${index}.suggested`),
-      reason: requireString(object.reason ?? object.context, `transcript_corrections.${index}.reason`),
-    };
-  });
-  if (input.source_record_id !== context.recordId) invalid("source_record_id");
-  if (input.source_platform !== context.platform) invalid("source_platform");
-  if (input.model !== context.model) invalid("model");
-  if (input.processor !== "local-ai-analysis") invalid("processor");
+  const normalizedCorrections = normalizeTranscriptCorrections(input.transcript_corrections);
   return {
     summary: requireString(input.summary, "summary"),
     key_points: requireStrings(input.key_points, "key_points"),
@@ -107,8 +104,56 @@ export function parseAndValidateAnalysis(raw: string, context: AnalysisValidatio
     source_platform: context.platform,
     processor: "local-ai-analysis",
     model: context.model,
-    processor_version: requireString(input.processor_version, "processor_version"),
+    processor_version: "1.0.0",
   };
+}
+
+export interface AnalysisCompletionClient {
+  completeJson(systemPrompt: string, payload: unknown): Promise<string>;
+}
+
+function isRepairableAnalysisError(error: unknown): error is Error {
+  return error instanceof Error && /^analysis_(?:json_invalid|schema_invalid:)/.test(error.message);
+}
+
+export async function completeValidatedAnalysis(
+  client: AnalysisCompletionClient,
+  systemPrompt: string,
+  payload: unknown,
+  context: AnalysisValidationContext,
+): Promise<ContentAnalysisResult> {
+  let prompt = systemPrompt;
+  let requestPayload = payload;
+  let lastError: Error | undefined;
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const raw = await client.completeJson(prompt, requestPayload);
+    try {
+      return parseAndValidateAnalysis(raw, context);
+    } catch (error) {
+      if (!isRepairableAnalysisError(error) || attempt === 2) throw error;
+      lastError = error;
+      prompt = [
+        systemPrompt,
+        "上一次响应未通过本地结构校验。请根据 validation_error 修复并重新输出完整 JSON。",
+        "不要解释，不要输出 Markdown，不要省略必填字段。",
+      ].join("\n");
+      requestPayload = {
+        original_payload: payload,
+        previous_response: raw,
+        validation_error: error.message,
+        trusted_provenance: {
+          source_record_id: context.recordId,
+          source_platform: context.platform,
+          processor: "local-ai-analysis",
+          model: context.model,
+          processor_version: "1.0.0",
+        },
+      };
+    }
+  }
+
+  throw lastError ?? new Error("analysis_validation_failed");
 }
 
 export function buildAnalysisSystemPrompt(primaryCategories: string[]): string {
@@ -118,7 +163,7 @@ export function buildAnalysisSystemPrompt(primaryCategories: string[]): string {
     `primary_category必须且只能从这些选项选择：${JSON.stringify(primaryCategories)}。`,
     "secondary_category应复用现有值或给出一个克制的建议，不扩展分类体系。",
     "无法确认时使用空字符串、空数组，并写入quality_warnings。转写纠错必须提供原文、建议和上下文依据。",
-    "必填字段及类型：summary字符串；key_points字符串数组；primary_category字符串；secondary_category字符串；useful_information字符串或字符串值对象；action_items字符串数组；quality_warnings字符串数组。",
+    "必填字段及类型：summary字符串；key_points字符串数组；primary_category字符串；secondary_category字符串；useful_information字符串数组；action_items字符串数组；quality_warnings字符串数组。没有值得保存的信息时useful_information返回空数组。",
     "transcript_corrections必须是对象数组，每项严格包含original、suggested、reason三个字符串字段；没有可靠纠错时返回空数组。",
     "还必须原样返回source_record_id、source_platform、model，并返回processor和processor_version。",
     "processor固定为local-ai-analysis，processor_version固定为1.0.0。",

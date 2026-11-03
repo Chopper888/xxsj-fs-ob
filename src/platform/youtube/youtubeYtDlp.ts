@@ -31,7 +31,7 @@ export function buildYouTubeYtDlpConfigFromEnv(
 ): YouTubeYtDlpConfig {
   return {
     ytDlpPath: env.YTDLP_PATH?.trim() || join(cwd, ".venv", "Scripts", "yt-dlp.exe"),
-    proxy: env.YTDLP_PROXY?.trim() || env.HTTPS_PROXY?.trim() || "http://127.0.0.1:7897",
+    proxy: env.YTDLP_PROXY?.trim() || env.XXSJ_HTTPS_PROXY?.trim() || env.HTTPS_PROXY?.trim() || "",
     sleepRequests: Number(env.YTDLP_SLEEP_REQUESTS ?? 3),
     sleepInterval: Number(env.YTDLP_SLEEP_INTERVAL ?? 2),
     maxRetries: Number(env.YTDLP_MAX_RETRIES ?? 3),
@@ -118,7 +118,7 @@ async function runYtDlp(
 function baseArgs(config: YouTubeYtDlpConfig, overrides?: { sleepRequests?: number; sleepInterval?: number }): string[] {
   const args = [
     "--no-playlist",
-    "--proxy", config.proxy,
+    ...(config.proxy ? ["--proxy", config.proxy] : []),
     "--sleep-requests", String(overrides?.sleepRequests ?? config.sleepRequests),
     "--sleep-interval", String(overrides?.sleepInterval ?? config.sleepInterval),
     "--no-progress",

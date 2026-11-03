@@ -23,3 +23,8 @@ cookies/
 # Worker 运行时锁文件（含本机 PID 与运行 token）
 worker.lock
 worker.lock.stale-*
+
+# 本地 AI 客户端与脱敏基线，不提交
+.claude/
+.desensitize-baseline.json
+*.key

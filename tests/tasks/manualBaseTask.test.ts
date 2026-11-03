@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   assertTaskEligible,
@@ -60,13 +60,14 @@ describe("manual Base task entry", () => {
   });
 
   it("uses the Windows venv interpreter while retaining POSIX support", () => {
-    expect(resolveWhisperPython("win32", "H:\\xxsj-dyzx")).toBe("H:\\xxsj-dyzx\\.venv\\Scripts\\python.exe");
-    expect(resolveWhisperPython("linux", "/work/xxsj-dyzx")).toBe("/work/xxsj-dyzx/.venv/bin/python");
+    expect(resolveWhisperPython("win32", "fixtures\\project")).toBe("fixtures\\project\\.venv\\Scripts\\python.exe");
+    expect(resolveWhisperPython("linux", "/work/fixtures-project")).toBe("/work/fixtures-project/.venv/bin/python");
   });
 
   it("turns a configured relative Windows interpreter into an absolute path", () => {
-    expect(resolveConfiguredWhisperPython(".venv/Scripts/python.exe", "win32", "H:\\xxsj-dyzx"))
-      .toBe("H:\\xxsj-dyzx\\.venv\\Scripts\\python.exe");
+    const root = resolve("fixtures", "project");
+    expect(resolveConfiguredWhisperPython(".venv/Scripts/python.exe", "win32", root))
+      .toBe(root + "\\.venv\\Scripts\\python.exe");
   });
 
   it("builds a non-mutating one-record dry-run plan", () => {
@@ -75,8 +76,8 @@ describe("manual Base task entry", () => {
       sourceUrl: "https://www.douyin.com/video/7666820150208875814",
       status: "pending",
       dedupeId: "dy_7666820150208875814",
-      projectRoot: "H:\\xxsj-dyzx",
-      pythonPath: "H:\\xxsj-dyzx\\.venv\\Scripts\\python.exe",
+      projectRoot: "fixtures\\project",
+      pythonPath: "fixtures\\project\\.venv\\Scripts\\python.exe",
     });
     expect(plan).toMatchObject({
       recordId: "rec1",
@@ -84,6 +85,6 @@ describe("manual Base task entry", () => {
       expectedStateChanges: ["pending", "processing", "draft_ready"],
       normalizedDedupeId: "douyin:7666820150208875814",
     });
-    expect(plan.taskDir).toBe("H:\\xxsj-dyzx\\data\\tasks\\rec1");
+    expect(plan.taskDir).toBe("fixtures\\project\\data\\tasks\\rec1");
   });
 });

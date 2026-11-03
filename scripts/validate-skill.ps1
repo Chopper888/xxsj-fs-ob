@@ -248,7 +248,7 @@ if (Test-Path $cmdPath) {
     else { Fail "CMD missing %~dp0 reference to PS1" }
     
     # No hardcoded agents/codex path
-    if ($cmdText -match 'C:\\Users\\.*?\\\.(agents|codex)\\skills') { Fail "CMD has hardcoded user skill path" }
+    if ($cmdText -match '\\Users\\.*?\\\.(agents|codex)\\skills') { Fail "CMD has hardcoded user skill path" }
     else { Pass "CMD has no hardcoded skill path" }
 }
 

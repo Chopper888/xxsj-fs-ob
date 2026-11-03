@@ -37,6 +37,8 @@ description: "通过飞书多维表格任务队列运行本地信息收集 Worke
 
 小红书、其他：未实现，Worker 不会领取。来源平台留空按「抖音」处理。
 
+`一级标签` 的选项每轮从多维表格字段读取，用户在表里增删选项即可改变 AI 分析的分类范围；读取失败时回退内置默认分类。
+
 ## 处理流程
 
 ```text
@@ -93,7 +95,7 @@ description: "通过飞书多维表格任务队列运行本地信息收集 Worke
 - 复制 `.env.example` 为 `.env`，填入自己的值。
 - 必填：`FEISHU_BASE_TOKEN`、`FEISHU_TABLE_ID`、`LARK_PROFILE`、`OBSIDIAN_VAULT_PATH`、`LLM_API_KEY`（`SUMMARY_MODE=openai` 时）。
 - 可选：`DASHSCOPE_API_KEY`（不填走本地 Whisper）。
-- 代理：`XXSJ_HTTPS_PROXY` / `XXSJ_HTTP_PROXY`，留空表示不使用；X、YouTube 通常需要。
+- 代理：`XXSJ_HTTPS_PROXY` / `XXSJ_HTTP_PROXY`，留空表示不使用；X、YouTube 通常需要。yt-dlp 代理优先级为 `YTDLP_PROXY` → `XXSJ_HTTPS_PROXY` → `HTTPS_PROXY`。
 - 完整说明见 `README.md` 与 `.env.example` 注释。
 
 ## 安装位置

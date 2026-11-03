@@ -101,6 +101,16 @@ export class LarkCliAdapter {
     }
   }
 
+  readSelectOptions(fieldName: string): string[] {
+    const j = this.exec(["+field-get", "--field-id", fieldName, "--format", "json"]);
+    const options = j.data?.field?.options ?? j.data?.field?.property?.options;
+    if (!Array.isArray(options)) throw new Error("lark:unexpected_field_format");
+    return options
+      .map((option: unknown) => (typeof option === "string" ? option : (option as { name?: unknown } | null)?.name))
+      .map((name) => String(name ?? "").trim())
+      .filter(Boolean);
+  }
+
   validateFields(fields: Record<string,unknown>): void {
     for (const key of Object.keys(fields)) {
       if (!BASE_FIELD_NAMES.includes(key)) throw new Error("base_field_not_found:" + key);

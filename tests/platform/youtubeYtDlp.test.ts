@@ -36,7 +36,7 @@ afterEach(async () => {
 const taskDir = () => { const d = join(tmpdir(), `yt-${randomUUID()}`); cleanup.push(d); return d; };
 
 describe("buildYouTubeYtDlpConfigFromEnv", () => {
-  it("读取 YTDLP_* 覆盖，缺省落到 venv 路径 + 本地代理", () => {
+  it("读取 YTDLP_* 覆盖，缺省落到 venv 路径且不预设代理", () => {
     const c = buildYouTubeYtDlpConfigFromEnv({ YTDLP_PATH: "custom.exe", YTDLP_SLEEP_REQUESTS: "5", YTDLP_SLEEP_INTERVAL: "1" }, "ROOT");
     expect(c.ytDlpPath).toBe("custom.exe");
     expect(c.sleepRequests).toBe(5);
@@ -44,11 +44,18 @@ describe("buildYouTubeYtDlpConfigFromEnv", () => {
     expect(c.maxRetries).toBe(3);
     const d = buildYouTubeYtDlpConfigFromEnv({}, "ROOT");
     expect(d.ytDlpPath).toBe(join("ROOT", ".venv", "Scripts", "yt-dlp.exe"));
-    expect(d.proxy).toContain("127.0.0.1");
+    expect(d.proxy).toBe("");
   });
-  it("代理优先级 YTDLP_PROXY > HTTPS_PROXY", () => {
-    expect(buildYouTubeYtDlpConfigFromEnv({ YTDLP_PROXY: "socks5://a", HTTPS_PROXY: "http://b" }).proxy).toBe("socks5://a");
+  it("代理优先级 YTDLP_PROXY > XXSJ_HTTPS_PROXY > HTTPS_PROXY", () => {
+    expect(buildYouTubeYtDlpConfigFromEnv({ YTDLP_PROXY: "socks5://a", XXSJ_HTTPS_PROXY: "http://c", HTTPS_PROXY: "http://b" }).proxy).toBe("socks5://a");
+    expect(buildYouTubeYtDlpConfigFromEnv({ XXSJ_HTTPS_PROXY: "http://c", HTTPS_PROXY: "http://b" }).proxy).toBe("http://c");
     expect(buildYouTubeYtDlpConfigFromEnv({ HTTPS_PROXY: "http://b" }).proxy).toBe("http://b");
+  });
+  it("未配置代理时不向 yt-dlp 传 --proxy", async () => {
+    const spy = vi.fn();
+    const impl = ((_c: string, args: string[], _o: object, cb: ExecCallback) => { spy(args); cb(null, "{}", ""); }) as unknown as YtDlpDeps["execFileImpl"];
+    await fetchYouTubeMetadata("https://youtu.be/x", cfg({ proxy: "" }), { execFileImpl: impl });
+    expect(spy.mock.calls[0][0]).not.toContain("--proxy");
   });
   it("YTDLP_JS_RUNTIMES 读取 JS runtime，未设置时为 undefined", () => {
     expect(buildYouTubeYtDlpConfigFromEnv({ YTDLP_JS_RUNTIMES: "deno" }).jsRuntimes).toBe("deno");

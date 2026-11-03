@@ -10,7 +10,7 @@ const input = {
   resolvedDownloadUrl: "https://aweme.snssdk.com/aweme/v1/play/?video_id=real",
   resolvedAt: "2026-08-03T01:02:03.000Z",
   downloadUrlStatus: "available" as const,
-  localMediaPath: "H:\\xxsj-dyzx\\data\\tasks\\rec1\\media\\source.mp4",
+  localMediaPath: "tasks\\rec1\\media\\source.mp4",
   workId: "7666820150208875814",
   publishedAt: "2026-07-26T16:58:00+08:00",
   collectedAt: "2026-08-02T04:42:38+08:00",
