@@ -197,11 +197,9 @@ Worker 在后台运行；再次双击会复用正在运行的 Worker。关闭监
 
 详细说明见 [docs/安装部署与日常使用说明.md](docs/安装部署与日常使用说明.md)。
 
-### 教程与演示
+### 视频演示
 
-「📘 零基础图文教程（知识星球）：【知识星球链接，待补】」
-
-「🎬 视频演示（B站）：【B站视频链接，待补】」
+[B站视频演示](https://www.bilibili.com/video/BV1zU4g6eEBq/)
 
 ---
 
@@ -257,6 +255,15 @@ pip install faster-whisper
 - [飞书权限配置](docs/飞书权限配置.md)
 - [日志与缓存](docs/日志与缓存.md)
 - [升级与回滚](docs/升级与回滚.md)
+
+## 交流与反馈
+
+使用中遇到问题、有功能建议，欢迎交流；也可以直接在 GitHub 提 Issue 或 PR。
+
+| 微信（进交流群） | 公众号 |
+|:---:|:---:|
+| <img src="docs/images/wechat.jpg" width="220"> | <img src="docs/images/gzh.jpg" width="220"> |
+| 加好友备注「**xxsj**」，拉你进群 | 关注获取更新和教程 |
 
 ## License
 
