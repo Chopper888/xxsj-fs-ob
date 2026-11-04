@@ -26,22 +26,7 @@
 6. 写入你的 Obsidian vault；
 7. 回写多维表格：`处理状态=done`、`知识库路径`。
 
-```mermaid
-flowchart LR
-    A[飞书机器人收到链接] --> B[飞书多维表格<br/>pending]
-    B --> C[本地 Worker]
-    C --> D[解析与下载]
-    D --> E{有官方字幕?}
-    E -->|有| F[字幕文本]
-    E -->|无| G[Qwen-ASR]
-    G -->|失败| H[faster-whisper<br/>large-v3]
-    F --> I[AI 分析]
-    G --> I
-    H --> I
-    I --> J[Markdown]
-    J --> K[Obsidian]
-    K --> L[多维表格 done<br/>+ 知识库路径]
-```
+![处理流程](docs/images/04-flow.jpg)
 
 所有处理都在你自己的电脑上完成，API Key 和笔记不会上传到本项目。
 
